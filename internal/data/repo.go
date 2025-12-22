@@ -850,12 +850,30 @@ func (r *Repo) QueryExternals(ctx context.Context, where *ExternalWhereInput, or
 
 	partners, _ := r.fetchPartners(ctx, partnerIDs)
 	tagsMap, _ := r.fetchExternalTags(ctx, "_External_tags", externalIDs)
+	sectionsMap, _ := r.fetchExternalSections(ctx, externalIDs)
+	categoriesMap, _ := r.fetchExternalCategories(ctx, externalIDs)
+	relatedsMap, _, _ := r.fetchExternalRelateds(ctx, externalIDs)
 	for i := range result {
 		if pid := getMetaInt(result[i].Metadata, "partnerID"); pid > 0 {
 			result[i].Partner = partners[pid]
 		}
 		idInt, _ := strconv.Atoi(result[i].ID)
 		result[i].Tags = tagsMap[idInt]
+		if sections, ok := sectionsMap[idInt]; ok {
+			result[i].Sections = sections
+		} else {
+			result[i].Sections = []Section{}
+		}
+		if categories, ok := categoriesMap[idInt]; ok {
+			result[i].Categories = categories
+		} else {
+			result[i].Categories = []Category{}
+		}
+		if relateds, ok := relatedsMap[idInt]; ok {
+			result[i].Relateds = relateds
+		} else {
+			result[i].Relateds = []Post{}
+		}
 	}
 
 	// 寫入 cache
@@ -995,11 +1013,23 @@ func (r *Repo) QueryExternalByID(ctx context.Context, id string) (*External, err
 
 	// 補上 sections, categories, relateds
 	sectionsMap, _ := r.fetchExternalSections(ctx, []int{dbID})
-	ext.Sections = sectionsMap[dbID]
+	if sections, ok := sectionsMap[dbID]; ok {
+		ext.Sections = sections
+	} else {
+		ext.Sections = []Section{}
+	}
 	categoriesMap, _ := r.fetchExternalCategories(ctx, []int{dbID})
-	ext.Categories = categoriesMap[dbID]
+	if categories, ok := categoriesMap[dbID]; ok {
+		ext.Categories = categories
+	} else {
+		ext.Categories = []Category{}
+	}
 	relatedsMap, _, _ := r.fetchExternalRelateds(ctx, []int{dbID})
-	ext.Relateds = relatedsMap[dbID]
+	if relateds, ok := relatedsMap[dbID]; ok {
+		ext.Relateds = relateds
+	} else {
+		ext.Relateds = []Post{}
+	}
 
 	return &ext, nil
 }
@@ -1052,11 +1082,17 @@ func decodeJSONBytes(raw []byte) map[string]any {
 
 func decodeJSONBytesAny(raw []byte) interface{} {
 	if len(raw) == 0 {
-		return nil
+		// 當資料為空時，返回空陣列而不是 nil，以匹配 target 的行為
+		return []interface{}{}
 	}
 	var v interface{}
 	if err := json.Unmarshal(raw, &v); err != nil {
-		return nil
+		// 解析失敗時也返回空陣列，以匹配 target 的行為
+		return []interface{}{}
+	}
+	// 如果解析結果是 nil，返回空陣列
+	if v == nil {
+		return []interface{}{}
 	}
 	return v
 }
