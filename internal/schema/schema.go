@@ -165,9 +165,22 @@ func Build(repo *data.Repo) (graphql.Schema, error) {
 			"original": &graphql.Field{Type: graphql.String},
 			"w480":     &graphql.Field{Type: graphql.String},
 			"w800":     &graphql.Field{Type: graphql.String},
-			"w1200":    &graphql.Field{Type: graphql.String},
-			"w1600":    &graphql.Field{Type: graphql.String},
-			"w2400":    &graphql.Field{Type: graphql.String},
+			"w1200": &graphql.Field{
+				Type: graphql.String,
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					// w1200 是 virtual field，根據某些條件可能返回空字串
+					// 目前先返回實際值，如果需要可以根據圖片尺寸等條件判斷
+					resized, ok := p.Source.(data.Resized)
+					if !ok {
+						return "", nil
+					}
+					// 如果 target 的 w1200 是空字串，我們也返回空字串以匹配行為
+					// 這裡可以根據實際需求添加條件判斷（例如圖片尺寸等）
+					return resized.W1200, nil
+				},
+			},
+			"w1600": &graphql.Field{Type: graphql.String},
+			"w2400": &graphql.Field{Type: graphql.String},
 		},
 	})
 
@@ -551,8 +564,29 @@ func Build(repo *data.Repo) (graphql.Schema, error) {
 			"publishedDate": &graphql.Field{Type: dateTimeScalar},
 			"extend_byline": &graphql.Field{Type: graphql.String},
 			"thumbCaption":  &graphql.Field{Type: graphql.String},
-			"partner":       &graphql.Field{Type: partnerType},
-			"updatedAt":     &graphql.Field{Type: dateTimeScalar},
+			"partner": &graphql.Field{
+				Type: partnerType,
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					ext, ok := p.Source.(data.External)
+					if !ok {
+						if ptr, ok2 := p.Source.(*data.External); ok2 && ptr != nil {
+							ext = *ptr
+						} else {
+							return nil, nil
+						}
+					}
+					// partner 可能是 virtual field，如果資料庫中為 null，可能需要使用預設值
+					// 目前先返回實際值，如果需要可以根據條件判斷
+					if ext.Partner != nil {
+						return ext.Partner, nil
+					}
+					// 如果 target 有預設值邏輯，這裡可以實現
+					// 例如：當 partner 為 null 時，使用預設的 partner（id: 4, slug: mirrormedia）
+					// 但由於我們無法確定 target 的具體邏輯，暫時返回 nil
+					return nil, nil
+				},
+			},
+			"updatedAt": &graphql.Field{Type: dateTimeScalar},
 			"tags": &graphql.Field{
 				Type: graphql.NewList(tagType),
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
