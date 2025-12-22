@@ -66,6 +66,11 @@ type Tag struct {
 	Slug string `json:"slug"`
 }
 
+type Warning struct {
+	ID      string `json:"id"`
+	Content string `json:"content"`
+}
+
 type Video struct {
 	ID        string `json:"id"`
 	VideoSrc  string `json:"videoSrc"`
@@ -131,6 +136,8 @@ type Post struct {
 	IsAdvertised         bool           `json:"isAdvertised"`
 	IsFeatured           bool           `json:"isFeatured"`
 	Topics               *Topic         `json:"topics"`
+	Warning              *Warning       `json:"warning"`
+	Warnings             []Warning      `json:"warnings"`
 	Metadata             map[string]any `json:"-"`
 }
 
@@ -1183,6 +1190,7 @@ func (r *Repo) enrichPosts(ctx context.Context, posts []Post) error {
 
 	tagsMap, _ := r.fetchTags(ctx, "_Post_tags", postIDs)
 	tagsAlgoMap, _ := r.fetchTags(ctx, "_Post_tags_algo", postIDs)
+	warningsMap, _ := r.fetchPostWarnings(ctx, postIDs)
 
 	relatedsMap, relatedImageIDs, err := r.fetchRelatedPosts(ctx, postIDs)
 	if err != nil {
@@ -1255,6 +1263,10 @@ func (r *Repo) enrichPosts(ctx context.Context, posts []Post) error {
 		p.Vocals = roleMapVocals[id]
 		p.Tags = tagsMap[id]
 		p.TagsAlgo = tagsAlgoMap[id]
+		p.Warnings = warningsMap[id]
+		if len(p.Warnings) > 0 {
+			p.Warning = &p.Warnings[0]
+		}
 		p.Relateds = relatedsMap[id]
 		p.RelatedsInInputOrder = relatedsMap[id]
 		if idImg := getMetaInt(p.Metadata, "heroImageID"); idImg > 0 {
@@ -1371,6 +1383,28 @@ func (r *Repo) fetchTags(ctx context.Context, table string, postIDs []int) (map[
 			return result, err
 		}
 		result[pid] = append(result[pid], t)
+	}
+	return result, rows.Err()
+}
+
+func (r *Repo) fetchPostWarnings(ctx context.Context, postIDs []int) (map[int][]Warning, error) {
+	result := map[int][]Warning{}
+	if len(postIDs) == 0 {
+		return result, nil
+	}
+	query := `SELECT pw."A" as post_id, w.id, w.content FROM "_Post_warnings" pw JOIN "Warning" w ON w.id = pw."B" WHERE pw."A" = ANY($1) ORDER BY pw."A", pw."B"`
+	rows, err := r.db.QueryContext(ctx, query, pqIntArray(postIDs))
+	if err != nil {
+		return result, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var pid int
+		var w Warning
+		if err := rows.Scan(&pid, &w.ID, &w.Content); err != nil {
+			return result, err
+		}
+		result[pid] = append(result[pid], w)
 	}
 	return result, rows.Err()
 }

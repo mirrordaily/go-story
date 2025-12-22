@@ -520,15 +520,19 @@ func Build(repo *data.Repo) (graphql.Schema, error) {
 				"Warning": &graphql.Field{
 					Type: warningType,
 					Resolve: func(p graphql.ResolveParams) (interface{}, error) {
-						// 目前尚未從資料庫補警語，先回傳 nil 以滿足 schema
-						return nil, nil
+						post := normalizePost(p.Source)
+						return post.Warning, nil
 					},
 				},
 				"Warnings": &graphql.Field{
 					Type: graphql.NewList(warningType),
 					Resolve: func(p graphql.ResolveParams) (interface{}, error) {
-						// 目前尚未從資料庫補警語，先回傳空陣列
-						return []interface{}{}, nil
+						post := normalizePost(p.Source)
+						result := make([]interface{}, len(post.Warnings))
+						for i, w := range post.Warnings {
+							result[i] = w
+						}
+						return result, nil
 					},
 				},
 			}
