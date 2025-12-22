@@ -1277,9 +1277,9 @@ func (r *Repo) enrichPosts(ctx context.Context, posts []Post) error {
 		p.Tags = tagsMap[id]
 		p.TagsAlgo = tagsAlgoMap[id]
 		p.Warnings = warningsMap[id]
-		if len(p.Warnings) > 0 {
-			p.Warning = &p.Warnings[0]
-		}
+		// Warning 是 Post 表的獨立欄位（單數），不應從 Warnings 陣列自動取得
+		// 如果 Post 表有 Warning 欄位，應該在 SELECT 語句中讀取並填充
+		// 目前 Post 表沒有 Warning 欄位，所以保持為 nil
 		p.Relateds = relatedsMap[id]
 		p.RelatedsInInputOrder = relatedsMap[id]
 		if idImg := getMetaInt(p.Metadata, "heroImageID"); idImg > 0 {
