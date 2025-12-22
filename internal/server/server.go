@@ -610,21 +610,70 @@ func deepEqualData(a, b interface{}) bool {
 
 // findDataDifference 找出 data 差異的簡要描述
 func findDataDifference(a, b interface{}) string {
+	return findDataDifferenceRecursive(a, b, "")
+}
+
+func findDataDifferenceRecursive(a, b interface{}, path string) string {
+	// 如果相同，返回空字串
+	if deepEqualData(a, b) {
+		return ""
+	}
+
+	// 處理 map
 	aMap, aIsMap := a.(map[string]interface{})
 	bMap, bIsMap := b.(map[string]interface{})
 	if aIsMap && bIsMap {
+		// 檢查缺少的 key
 		for k := range aMap {
 			if _, ok := bMap[k]; !ok {
-				return fmt.Sprintf("missing key in self: %s", k)
+				return fmt.Sprintf("missing key in self: %s", buildPath(path, k))
 			}
 		}
+		// 檢查多餘的 key
 		for k := range bMap {
 			if _, ok := aMap[k]; !ok {
-				return fmt.Sprintf("extra key in self: %s", k)
+				return fmt.Sprintf("extra key in self: %s", buildPath(path, k))
 			}
 		}
+		// 遞迴檢查每個 key 的值
+		for k, av := range aMap {
+			if bv, ok := bMap[k]; ok {
+				if diff := findDataDifferenceRecursive(av, bv, buildPath(path, k)); diff != "" {
+					return diff
+				}
+			}
+		}
+		return "structure or value differs"
+	}
+
+	// 處理 slice
+	aSlice, aIsSlice := a.([]interface{})
+	bSlice, bIsSlice := b.([]interface{})
+	if aIsSlice && bIsSlice {
+		if len(aSlice) != len(bSlice) {
+			return fmt.Sprintf("array length differs at %s: target=%d, self=%d", path, len(aSlice), len(bSlice))
+		}
+		// 檢查每個元素
+		for i := 0; i < len(aSlice) && i < 3; i++ { // 只檢查前 3 個元素避免輸出過長
+			if diff := findDataDifferenceRecursive(aSlice[i], bSlice[i], fmt.Sprintf("%s[%d]", path, i)); diff != "" {
+				return diff
+			}
+		}
+		return "array elements differ"
+	}
+
+	// 基本類型比較
+	if path != "" {
+		return fmt.Sprintf("value differs at %s: target=%v, self=%v", path, a, b)
 	}
 	return "structure or value differs"
+}
+
+func buildPath(base, key string) string {
+	if base == "" {
+		return key
+	}
+	return fmt.Sprintf("%s.%s", base, key)
 }
 
 func normalizeJSON(raw []byte) (interface{}, error) {

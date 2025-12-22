@@ -1241,7 +1241,7 @@ func (r *Repo) fetchSections(ctx context.Context, postIDs []int) (map[int][]Sect
 	if len(postIDs) == 0 {
 		return result, nil
 	}
-	query := `SELECT ps."A" as post_id, s.id, s.name, s.slug, s.state FROM "_Post_sections" ps JOIN "Section" s ON s.id = ps."B" WHERE ps."A" = ANY($1)`
+	query := `SELECT ps."A" as post_id, s.id, s.name, s.slug, s.state, COALESCE(s.color, '') as color FROM "_Post_sections" ps JOIN "Section" s ON s.id = ps."B" WHERE ps."A" = ANY($1)`
 	rows, err := r.db.QueryContext(ctx, query, pqIntArray(postIDs))
 	if err != nil {
 		return result, err
@@ -1250,7 +1250,7 @@ func (r *Repo) fetchSections(ctx context.Context, postIDs []int) (map[int][]Sect
 	for rows.Next() {
 		var pid int
 		var s Section
-		if err := rows.Scan(&pid, &s.ID, &s.Name, &s.Slug, &s.State); err != nil {
+		if err := rows.Scan(&pid, &s.ID, &s.Name, &s.Slug, &s.State, &s.Color); err != nil {
 			return result, err
 		}
 		result[pid] = append(result[pid], s)
@@ -1507,7 +1507,7 @@ func (r *Repo) fetchExternalSections(ctx context.Context, externalIDs []int) (ma
 	if len(externalIDs) == 0 {
 		return result, nil
 	}
-	query := `SELECT es."A" as external_id, s.id, s.name, s.slug, s.state, s.color FROM "_External_sections" es JOIN "Section" s ON s.id = es."B" WHERE es."A" = ANY($1)`
+	query := `SELECT es."A" as external_id, s.id, s.name, s.slug, s.state, COALESCE(s.color, '') as color FROM "_External_sections" es JOIN "Section" s ON s.id = es."B" WHERE es."A" = ANY($1)`
 	rows, err := r.db.QueryContext(ctx, query, pqIntArray(externalIDs))
 	if err != nil {
 		return result, err
