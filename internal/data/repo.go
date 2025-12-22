@@ -148,6 +148,8 @@ type External struct {
 	Content       string         `json:"content"`
 	UpdatedAt     string         `json:"updatedAt"`
 	Tags          []Tag          `json:"tags"`
+	Sections      []Section      `json:"sections"`
+	Categories    []Category     `json:"categories"`
 	Relateds      []Post         `json:"relateds"`
 	Metadata      map[string]any `json:"metadata"`
 }
@@ -887,12 +889,30 @@ func (r *Repo) QueryExternalsCount(ctx context.Context, where *ExternalWhereInpu
 }
 
 // QueryExternalByID 依照 ID 取得單一 External，對應前端 external(where: { id: $id }) 查詢。
+// Lilith 的 GraphQL schema 對 External.id 使用 Int 型別的 filter，
+// 而在 probe 時我們會用 GraphQL ID 變數呼叫自己與 target。
+// 為了同時支援：
+//   - 前端以字串形式傳入的 ID（例如 "1378586"）
+//   - GraphQL 解析變數時產生的科學記號字串（例如 "1.378586e+06"）
+// 這裡統一將傳入的 id 轉成整數後再帶入 SQL。
 func (r *Repo) QueryExternalByID(ctx context.Context, id string) (*External, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
 	if id == "" {
 		return nil, nil
+	}
+
+	// 將字串 ID 轉為整數，容忍科學記號格式
+	var idInt int
+	if i, err := strconv.Atoi(id); err == nil {
+		idInt = i
+	} else {
+		if f, err2 := strconv.ParseFloat(id, 64); err2 == nil {
+			idInt = int(f)
+		} else {
+			return nil, fmt.Errorf("invalid external id %q: %w", id, err)
+		}
 	}
 
 	query := `SELECT e.id, e.slug, e.title, e.state, e."publishedDate", e."extend_byline", e.thumb, e."thumbCaption", e.brief, e.content, e.partner, e."updatedAt" FROM "External" e WHERE e.id = $1 LIMIT 1`
@@ -905,7 +925,7 @@ func (r *Repo) QueryExternalByID(ctx context.Context, id string) (*External, err
 		partnerID sql.NullInt64
 	)
 
-	if err := r.db.QueryRowContext(ctx, query, id).Scan(
+	if err := r.db.QueryRowContext(ctx, query, idInt).Scan(
 		&dbID,
 		&ext.Slug,
 		&ext.Title,
@@ -945,6 +965,14 @@ func (r *Repo) QueryExternalByID(ctx context.Context, id string) (*External, err
 	}
 	tagsMap, _ := r.fetchExternalTags(ctx, "_External_tags", []int{dbID})
 	ext.Tags = tagsMap[dbID]
+
+	// 補上 sections, categories, relateds
+	sectionsMap, _ := r.fetchExternalSections(ctx, []int{dbID})
+	ext.Sections = sectionsMap[dbID]
+	categoriesMap, _ := r.fetchExternalCategories(ctx, []int{dbID})
+	ext.Categories = categoriesMap[dbID]
+	relatedsMap, _, _ := r.fetchExternalRelateds(ctx, []int{dbID})
+	ext.Relateds = relatedsMap[dbID]
 
 	return &ext, nil
 }
@@ -1447,6 +1475,87 @@ func (r *Repo) fetchPartners(ctx context.Context, ids []int) (map[int]*Partner, 
 		result[dbID] = &p
 	}
 	return result, rows.Err()
+}
+
+func (r *Repo) fetchExternalSections(ctx context.Context, externalIDs []int) (map[int][]Section, error) {
+	result := map[int][]Section{}
+	if len(externalIDs) == 0 {
+		return result, nil
+	}
+	query := `SELECT es."A" as external_id, s.id, s.name, s.slug, s.state, s.color FROM "_External_sections" es JOIN "Section" s ON s.id = es."B" WHERE es."A" = ANY($1)`
+	rows, err := r.db.QueryContext(ctx, query, pqIntArray(externalIDs))
+	if err != nil {
+		return result, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var eid int
+		var s Section
+		if err := rows.Scan(&eid, &s.ID, &s.Name, &s.Slug, &s.State, &s.Color); err != nil {
+			return result, err
+		}
+		result[eid] = append(result[eid], s)
+	}
+	return result, rows.Err()
+}
+
+func (r *Repo) fetchExternalCategories(ctx context.Context, externalIDs []int) (map[int][]Category, error) {
+	result := map[int][]Category{}
+	if len(externalIDs) == 0 {
+		return result, nil
+	}
+	query := `SELECT ec."A" as external_id, c.id, c.name, c.slug, c.state FROM "_External_categories" ec JOIN "Category" c ON c.id = ec."B" WHERE ec."A" = ANY($1)`
+	rows, err := r.db.QueryContext(ctx, query, pqIntArray(externalIDs))
+	if err != nil {
+		return result, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var eid int
+		var c Category
+		if err := rows.Scan(&eid, &c.ID, &c.Name, &c.Slug, &c.State); err != nil {
+			return result, err
+		}
+		// isMemberOnly 欄位在資料庫中不存在，設為預設值 false
+		c.IsMemberOnly = false
+		result[eid] = append(result[eid], c)
+	}
+	return result, rows.Err()
+}
+
+func (r *Repo) fetchExternalRelateds(ctx context.Context, externalIDs []int) (map[int][]Post, []int, error) {
+	result := map[int][]Post{}
+	imageIDs := []int{}
+	if len(externalIDs) == 0 {
+		return result, imageIDs, nil
+	}
+	query := `
+		SELECT er."A" as external_id, p.id, p.slug, p.title, p."heroImage"
+		FROM "_External_relateds" er
+		JOIN "Post" p ON p.id = er."B"
+		WHERE er."A" = ANY($1)
+	`
+	rows, err := r.db.QueryContext(ctx, query, pqIntArray(externalIDs))
+	if err != nil {
+		return result, imageIDs, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var eid int
+		var rp Post
+		var dbID int
+		var heroID sql.NullInt64
+		if err := rows.Scan(&eid, &dbID, &rp.Slug, &rp.Title, &heroID); err != nil {
+			return result, imageIDs, err
+		}
+		rp.ID = strconv.Itoa(dbID)
+		if heroID.Valid {
+			imageIDs = append(imageIDs, int(heroID.Int64))
+			rp.Metadata = map[string]any{"heroImageID": int(heroID.Int64)}
+		}
+		result[eid] = append(result[eid], rp)
+	}
+	return result, imageIDs, rows.Err()
 }
 
 func (r *Repo) fetchExternalTags(ctx context.Context, table string, externalIDs []int) (map[int][]Tag, error) {

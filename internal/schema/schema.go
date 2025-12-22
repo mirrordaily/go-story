@@ -563,23 +563,58 @@ func Build(repo *data.Repo) (graphql.Schema, error) {
 					return ext.Tags, nil
 				},
 			},
-			// sections / categories / relateds 目前先回傳空，僅為了讓 external.gql 可以通過 schema 驗證
 			"sections": &graphql.Field{
 				Type: graphql.NewList(sectionType),
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
-					return []interface{}{}, nil
+					ext, ok := p.Source.(data.External)
+					if !ok {
+						if ptr, ok2 := p.Source.(*data.External); ok2 && ptr != nil {
+							ext = *ptr
+						} else {
+							return []interface{}{}, nil
+						}
+					}
+					result := make([]interface{}, len(ext.Sections))
+					for i, s := range ext.Sections {
+						result[i] = s
+					}
+					return result, nil
 				},
 			},
 			"categories": &graphql.Field{
 				Type: graphql.NewList(categoryType),
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
-					return []interface{}{}, nil
+					ext, ok := p.Source.(data.External)
+					if !ok {
+						if ptr, ok2 := p.Source.(*data.External); ok2 && ptr != nil {
+							ext = *ptr
+						} else {
+							return []interface{}{}, nil
+						}
+					}
+					result := make([]interface{}, len(ext.Categories))
+					for i, c := range ext.Categories {
+						result[i] = c
+					}
+					return result, nil
 				},
 			},
 			"relateds": &graphql.Field{
 				Type: graphql.NewList(postType),
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
-					return []interface{}{}, nil
+					ext, ok := p.Source.(data.External)
+					if !ok {
+						if ptr, ok2 := p.Source.(*data.External); ok2 && ptr != nil {
+							ext = *ptr
+						} else {
+							return []interface{}{}, nil
+						}
+					}
+					result := make([]interface{}, len(ext.Relateds))
+					for i, r := range ext.Relateds {
+						result[i] = r
+					}
+					return result, nil
 				},
 			},
 		},
