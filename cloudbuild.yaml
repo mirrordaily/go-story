@@ -1,5 +1,7 @@
 substitutions:
   _IMAGE_NAME: go-story
+  _DEPLOY_REGION: asia-east1
+  _PLATFORM: managed
 
 steps:
   # Build image
