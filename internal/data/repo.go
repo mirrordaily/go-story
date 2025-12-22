@@ -1619,12 +1619,13 @@ func (r *Repo) buildResizedURLs(fileID, ext string) Resized {
 	if ext == "" {
 		ext = "jpg"
 	}
-	host := r.staticsHost
+	host := strings.TrimSuffix(r.staticsHost, "/")
 	makeURL := func(size string, extension string) string {
-		if size == "" {
-			return fmt.Sprintf("%s/%s.%s", host, fileID, extension)
+		path := fmt.Sprintf("images/%s", fileID)
+		if size != "" {
+			path = fmt.Sprintf("images/%s-%s", fileID, size)
 		}
-		return fmt.Sprintf("%s/%s-%s.%s", host, fileID, size, extension)
+		return fmt.Sprintf("%s/%s.%s", host, path, extension)
 	}
 	return Resized{
 		Original: makeURL("", ext),
