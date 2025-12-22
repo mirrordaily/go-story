@@ -1405,29 +1405,18 @@ func (r *Repo) fetchPostWarnings(ctx context.Context, postIDs []int) (map[int][]
 	if len(postIDs) == 0 {
 		return result, nil
 	}
-	// Warnings 是從 relateds 來的，需要 join Warning 表與 relateds
+	// Warnings 應該直接從 Post 本身的 _Post_Warnings 表取得
 	// 根據實際表名，表名是 _Post_Warnings（大寫 W），A 是 Post ID，B 是 Warning ID
-	tableName := "_Post_Warnings"
-	// 查詢從 relateds 取得的 warnings
-	query := fmt.Sprintf(`
-		SELECT DISTINCT r."A" as post_id, w.id, w.content
-		FROM "_Post_relateds" r
-		JOIN "Post" p ON p.id = r."B"
-		JOIN "%s" pw ON pw."A" = p.id
+	query := `
+		SELECT pw."A" as post_id, w.id, w.content
+		FROM "_Post_Warnings" pw
 		JOIN "Warning" w ON w.id = pw."B"
-		WHERE r."A" = ANY($1)
-		UNION
-		SELECT DISTINCT r."B" as post_id, w.id, w.content
-		FROM "_Post_relateds" r
-		JOIN "Post" p ON p.id = r."A"
-		JOIN "%s" pw ON pw."A" = p.id
-		JOIN "Warning" w ON w.id = pw."B"
-		WHERE r."B" = ANY($1)
-		ORDER BY post_id, w.id
-	`, tableName, tableName)
+		WHERE pw."A" = ANY($1)
+		ORDER BY pw."A", w.id
+	`
 	rows, err := r.db.QueryContext(ctx, query, pqIntArray(postIDs))
 	if err != nil {
-		// 如果查詢失敗，返回空結果（不返回錯誤，因為可能是表不存在或沒有 relateds）
+		// 如果查詢失敗，返回空結果（不返回錯誤，因為可能是表不存在）
 		return result, nil
 	}
 	defer rows.Close()
@@ -1439,17 +1428,7 @@ func (r *Repo) fetchPostWarnings(ctx context.Context, postIDs []int) (map[int][]
 			return result, err
 		}
 		w.ID = strconv.Itoa(warningID)
-		// 使用 map 來去重（避免重複的 warning）
-		found := false
-		for _, existing := range result[pid] {
-			if existing.ID == w.ID {
-				found = true
-				break
-			}
-		}
-		if !found {
-			result[pid] = append(result[pid], w)
-		}
+		result[pid] = append(result[pid], w)
 	}
 	return result, rows.Err()
 }
@@ -1674,21 +1653,18 @@ func (r *Repo) fetchExternalCategories(ctx context.Context, externalIDs []int) (
 	if len(externalIDs) == 0 {
 		return result, nil
 	}
-	// categories 是從 relateds 來的，需要 join Category 表與 relateds
-	// 根據 schema.prisma，External 的 relateds 是 Post[]，所以從 related posts 的 categories 取得
-	// 先嘗試從 relateds 取得 categories
+	// 根據實際表名，External 的 categories 是直接關聯 _Category_externals 表
+	// 其中 A 是 Category ID，B 是 External ID
 	query := `
-		SELECT DISTINCT er."A" as external_id, c.id, c.name, c.slug, c.state
-		FROM "_External_relateds" er
-		JOIN "Post" p ON p.id = er."B"
-		JOIN "_Category_posts" cp ON cp."B" = p.id
-		JOIN "Category" c ON c.id = cp."A"
-		WHERE er."A" = ANY($1)
-		ORDER BY er."A", c.id
+		SELECT DISTINCT ce."B" as external_id, c.id, c.name, c.slug, c.state
+		FROM "_Category_externals" ce
+		JOIN "Category" c ON c.id = ce."A"
+		WHERE ce."B" = ANY($1)
+		ORDER BY ce."B", c.id
 	`
 	rows, err := r.db.QueryContext(ctx, query, pqIntArray(externalIDs))
 	if err != nil {
-		// 如果查詢失敗，返回空結果（不返回錯誤，因為可能是表不存在或沒有 relateds）
+		// 如果查詢失敗，返回空結果
 		return result, nil
 	}
 	defer rows.Close()
