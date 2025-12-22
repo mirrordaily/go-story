@@ -51,6 +51,7 @@ type ProbeResult struct {
 	StatusCode int             `json:"statusCode"`
 	Body       json.RawMessage `json:"body,omitempty"`
 	Error      string          `json:"error,omitempty"`
+	GQLErrors  []string        `json:"gqlErrors,omitempty"` // GraphQL errors 的簡要資訊
 }
 
 // ProbeHandler runs a set of built-in GQL queries against target URL.
@@ -82,13 +83,15 @@ func ProbeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type compare struct {
-		Name         string `json:"name"`
-		Match        bool   `json:"match"`
-		TargetStatus int    `json:"targetStatus"`
-		SelfStatus   int    `json:"selfStatus"`
-		TargetError  string `json:"targetError,omitempty"`
-		SelfError    string `json:"selfError,omitempty"`
-		Note         string `json:"note,omitempty"`
+		Name            string   `json:"name"`
+		Match           bool     `json:"match"`
+		TargetStatus    int      `json:"targetStatus"`
+		SelfStatus      int      `json:"selfStatus"`
+		TargetError     string   `json:"targetError,omitempty"`
+		SelfError       string   `json:"selfError,omitempty"`
+		TargetGQLErrors []string `json:"targetGQLErrors,omitempty"`
+		SelfGQLErrors   []string `json:"selfGQLErrors,omitempty"`
+		Note            string   `json:"note,omitempty"`
 	}
 
 	results := []compare{}
@@ -96,13 +99,15 @@ func ProbeHandler(w http.ResponseWriter, r *http.Request) {
 		sr := selfMap[tr.Name]
 		match, note := compareBodies(tr, sr)
 		results = append(results, compare{
-			Name:         tr.Name,
-			Match:        match,
-			TargetStatus: tr.StatusCode,
-			SelfStatus:   sr.StatusCode,
-			TargetError:  tr.Error,
-			SelfError:    sr.Error,
-			Note:         note,
+			Name:            tr.Name,
+			Match:           match,
+			TargetStatus:    tr.StatusCode,
+			SelfStatus:      sr.StatusCode,
+			TargetError:     tr.Error,
+			SelfError:       sr.Error,
+			TargetGQLErrors: tr.GQLErrors,
+			SelfGQLErrors:   sr.GQLErrors,
+			Note:            note,
 		})
 	}
 
@@ -393,7 +398,7 @@ query GetExternalsByPartnerSlug(
 		{
 			name: "posts_list",
 			body: map[string]any{
-				"query": `query ($take:Int,$skip:Int,$orderBy:[PostOrderByInput!]!,$filter:PostWhereInput!){
+				"query": `query ($take:Int,$skip:Int,$orderBy:[PostOrderByInput],$filter:PostWhereInput){
 					postsCount(where:$filter)
 					posts(take:$take,skip:$skip,orderBy:$orderBy,where:$filter){
 						id slug title publishedDate state
@@ -432,7 +437,7 @@ query GetExternalsByPartnerSlug(
 		{
 			name: "externals_list",
 			body: map[string]any{
-				"query": `query ($take:Int,$skip:Int,$orderBy:[ExternalOrderByInput!]!,$filter:ExternalWhereInput!){
+				"query": `query ($take:Int,$skip:Int,$orderBy:[ExternalOrderByInput],$filter:ExternalWhereInput){
 					externals(take:$take,skip:$skip,orderBy:$orderBy,where:$filter){
 						id slug title thumb brief publishedDate partner{ id slug name showOnIndex }
 					}
@@ -501,6 +506,19 @@ query GetExternalsByPartnerSlug(
 			res.Error = err.Error()
 		} else {
 			res.Body = json.RawMessage(body)
+			// 嘗試解析 GraphQL errors
+			var gqlResp struct {
+				Errors []struct {
+					Message string      `json:"message"`
+					Path    interface{} `json:"path,omitempty"`
+				} `json:"errors"`
+			}
+			if json.Unmarshal(body, &gqlResp) == nil && len(gqlResp.Errors) > 0 {
+				res.GQLErrors = make([]string, 0, len(gqlResp.Errors))
+				for _, e := range gqlResp.Errors {
+					res.GQLErrors = append(res.GQLErrors, e.Message)
+				}
+			}
 		}
 		results = append(results, res)
 	}
@@ -663,7 +681,7 @@ func probeSampleVars(client *http.Client, target string) map[string]string {
 
 	// 1) 抓一篇 post（已發佈）
 	postReqBody := gqlPayload{
-		Query: `query ($take:Int,$skip:Int,$orderBy:[PostOrderByInput!]!,$filter:PostWhereInput!){
+		Query: `query ($take:Int,$skip:Int,$orderBy:[PostOrderByInput],$filter:PostWhereInput){
   posts(take:$take,skip:$skip,orderBy:$orderBy,where:$filter){
     id
     slug
@@ -703,7 +721,7 @@ func probeSampleVars(client *http.Client, target string) map[string]string {
 
 	// 2) 抓一篇 external（已發佈，且有 partner）
 	extReqBody := gqlPayload{
-		Query: `query ($take:Int,$skip:Int,$orderBy:[ExternalOrderByInput!]!,$filter:ExternalWhereInput!){
+		Query: `query ($take:Int,$skip:Int,$orderBy:[ExternalOrderByInput],$filter:ExternalWhereInput){
   externals(take:$take,skip:$skip,orderBy:$orderBy,where:$filter){
     id
     slug
