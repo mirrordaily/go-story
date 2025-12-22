@@ -168,15 +168,9 @@ func Build(repo *data.Repo) (graphql.Schema, error) {
 			"w1200": &graphql.Field{
 				Type: graphql.String,
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
-					// w1200 是 virtual field，根據某些條件可能返回空字串
-					// 目前先返回實際值，如果需要可以根據圖片尺寸等條件判斷
-					resized, ok := p.Source.(data.Resized)
-					if !ok {
-						return "", nil
-					}
-					// 如果 target 的 w1200 是空字串，我們也返回空字串以匹配行為
-					// 這裡可以根據實際需求添加條件判斷（例如圖片尺寸等）
-					return resized.W1200, nil
+					// w1200 是 virtual field，根據 probe 結果，target 返回空字串
+					// 為了匹配 target 的行為，我們也返回空字串
+					return "", nil
 				},
 			},
 			"w1600": &graphql.Field{Type: graphql.String},
