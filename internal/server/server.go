@@ -49,8 +49,9 @@ func NewGraphQLHandler(schema graphql.Schema) http.Handler {
 
 type ProbeResult struct {
 	Name       string          `json:"name"`
+	Query      string          `json:"query,omitempty"` // 完整的 GraphQL query
 	StatusCode int             `json:"statusCode"`
-	Body       json.RawMessage `json:"body,omitempty"`
+	Body       json.RawMessage `json:"body,omitempty"` // 完整的 response body
 	Error      string          `json:"error,omitempty"`
 	GQLErrors  []string        `json:"gqlErrors,omitempty"` // GraphQL errors 的簡要資訊
 }
@@ -84,15 +85,18 @@ func ProbeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type compare struct {
-		Name            string   `json:"name"`
-		Match           bool     `json:"match"`
-		TargetStatus    int      `json:"targetStatus"`
-		SelfStatus      int      `json:"selfStatus"`
-		TargetError     string   `json:"targetError,omitempty"`
-		SelfError       string   `json:"selfError,omitempty"`
-		TargetGQLErrors []string `json:"targetGQLErrors,omitempty"`
-		SelfGQLErrors   []string `json:"selfGQLErrors,omitempty"`
-		Note            string   `json:"note,omitempty"`
+		Name            string          `json:"name"`
+		Match           bool            `json:"match"`
+		Query           string          `json:"query,omitempty"` // 完整的 GraphQL query
+		TargetStatus    int             `json:"targetStatus"`
+		SelfStatus      int             `json:"selfStatus"`
+		TargetError     string          `json:"targetError,omitempty"`
+		SelfError       string          `json:"selfError,omitempty"`
+		TargetGQLErrors []string        `json:"targetGQLErrors,omitempty"`
+		SelfGQLErrors   []string        `json:"selfGQLErrors,omitempty"`
+		TargetBody      json.RawMessage `json:"targetBody,omitempty"` // 完整的 target response body
+		SelfBody        json.RawMessage `json:"selfBody,omitempty"`   // 完整的 self response body
+		Note            string          `json:"note,omitempty"`
 	}
 
 	results := []compare{}
@@ -102,12 +106,15 @@ func ProbeHandler(w http.ResponseWriter, r *http.Request) {
 		results = append(results, compare{
 			Name:            tr.Name,
 			Match:           match,
+			Query:           tr.Query, // 顯示完整的 GraphQL query
 			TargetStatus:    tr.StatusCode,
 			SelfStatus:      sr.StatusCode,
 			TargetError:     tr.Error,
 			SelfError:       sr.Error,
 			TargetGQLErrors: tr.GQLErrors,
 			SelfGQLErrors:   sr.GQLErrors,
+			TargetBody:      tr.Body, // 顯示完整的 target response body
+			SelfBody:        sr.Body, // 顯示完整的 self response body
 			Note:            note,
 		})
 	}
@@ -454,6 +461,10 @@ query GetExternalsByPartnerSlug(
 	results := make([]ProbeResult, 0, len(tests))
 	for _, t := range tests {
 		res := ProbeResult{Name: t.name}
+		// 保存完整的 GraphQL query
+		if query, ok := t.body["query"].(string); ok {
+			res.Query = query
+		}
 		b, _ := json.Marshal(t.body)
 		req, err := http.NewRequest(http.MethodPost, target, bytes.NewReader(b))
 		if err != nil {
