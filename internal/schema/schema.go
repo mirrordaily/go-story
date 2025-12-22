@@ -575,14 +575,16 @@ func Build(repo *data.Repo) (graphql.Schema, error) {
 							return nil, nil
 						}
 					}
-					// partner 可能是 virtual field，如果資料庫中為 null，可能需要使用預設值
-					// 目前先返回實際值，如果需要可以根據條件判斷
+					// partner 可能是 virtual field，如果資料庫中為 null，使用預設值
 					if ext.Partner != nil {
 						return ext.Partner, nil
 					}
-					// 如果 target 有預設值邏輯，這裡可以實現
-					// 例如：當 partner 為 null 時，使用預設的 partner（id: 4, slug: mirrormedia）
-					// 但由於我們無法確定 target 的具體邏輯，暫時返回 nil
+					// 根據 probe 結果，target 的預設 partner 是 id: 4, slug: mirrormedia
+					// 當 partner 為 null 時，使用預設的 partner
+					defaultPartner, err := repo.QueryPartnerByID(p.Context, "4")
+					if err == nil && defaultPartner != nil {
+						return defaultPartner, nil
+					}
 					return nil, nil
 				},
 			},

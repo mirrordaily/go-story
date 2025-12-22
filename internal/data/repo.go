@@ -1592,6 +1592,22 @@ func (r *Repo) fetchPartners(ctx context.Context, ids []int) (map[int]*Partner, 
 	return result, rows.Err()
 }
 
+// QueryPartnerByID 查詢單一 Partner by ID（用於預設值邏輯）
+func (r *Repo) QueryPartnerByID(ctx context.Context, id string) (*Partner, error) {
+	idInt, err := strconv.Atoi(id)
+	if err != nil {
+		return nil, err
+	}
+	partners, err := r.fetchPartners(ctx, []int{idInt})
+	if err != nil {
+		return nil, err
+	}
+	if p, ok := partners[idInt]; ok {
+		return p, nil
+	}
+	return nil, nil
+}
+
 func (r *Repo) fetchExternalSections(ctx context.Context, externalIDs []int) (map[int][]Section, error) {
 	result := map[int][]Section{}
 	if len(externalIDs) == 0 {
