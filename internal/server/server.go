@@ -378,6 +378,14 @@ query GetExternalsByPartnerSlug(
     @include(if: $withAmount)
 }`
 
+	// probeSampleVars 會對 target GraphQL 發出簡單查詢，取得一組可用的 post / external / partner 參考值
+	// 若失敗則回傳空字串，後續測試會用空變數，讓差異顯示在比對結果中。
+	samples := probeSampleVars(client, target)
+	postID := samples["postID"]
+	postSlug := samples["postSlug"]
+	externalID := samples["externalID"]
+	externalSlug := samples["externalSlug"]
+
 	tests := []struct {
 		name string
 		body map[string]any
@@ -408,7 +416,7 @@ query GetExternalsByPartnerSlug(
 				"query":         postGQL,
 				"operationName": "GetPostById",
 				"variables": map[string]any{
-					"id": "1",
+					"id": postID,
 				},
 			},
 		},
@@ -417,7 +425,7 @@ query GetExternalsByPartnerSlug(
 			body: map[string]any{
 				"query": `query ($slug:String){ post(where:{slug:$slug}){ id slug title state } }`,
 				"variables": map[string]any{
-					"slug": "20251212-4-173036",
+					"slug": postSlug,
 				},
 			},
 		},
@@ -451,7 +459,7 @@ query GetExternalsByPartnerSlug(
 					}
 				}`,
 				"variables": map[string]any{
-					"slug": "mirrordaily_35695",
+					"slug": externalSlug,
 				},
 			},
 		},
@@ -462,7 +470,7 @@ query GetExternalsByPartnerSlug(
 				"query":         externalGQL,
 				"operationName": "GetExternalById",
 				"variables": map[string]any{
-					"id": "1",
+					"id": externalID,
 				},
 			},
 		},
@@ -508,20 +516,127 @@ func compareBodies(target ProbeResult, self ProbeResult) (bool, string) {
 		return false, "status code differ"
 	}
 
-	tObj, tErr := normalizeJSON(target.Body)
-	sObj, sErr := normalizeJSON(self.Body)
-	if tErr == nil && sErr == nil {
-		if reflect.DeepEqual(tObj, sObj) {
-			return true, ""
-		}
-		return false, "body JSON differ"
+	// 解析 GraphQL response 結構
+	type gqlResponse struct {
+		Data   interface{} `json:"data"`
+		Errors interface{} `json:"errors"`
 	}
 
-	// fallback raw compare
-	if bytes.Equal(target.Body, self.Body) {
+	var targetResp, selfResp gqlResponse
+	if err := json.Unmarshal(target.Body, &targetResp); err != nil {
+		return false, fmt.Sprintf("target JSON parse error: %v", err)
+	}
+	if err := json.Unmarshal(self.Body, &selfResp); err != nil {
+		return false, fmt.Sprintf("self JSON parse error: %v", err)
+	}
+
+	// 檢查 errors：如果兩邊都有 errors 或都沒有 errors，繼續比對 data
+	// 如果一邊有 errors 另一邊沒有，則不 match
+	targetHasErrors := targetResp.Errors != nil && !isEmptyValue(targetResp.Errors)
+	selfHasErrors := selfResp.Errors != nil && !isEmptyValue(selfResp.Errors)
+	if targetHasErrors != selfHasErrors {
+		return false, fmt.Sprintf("errors mismatch: target has errors=%v, self has errors=%v", targetHasErrors, selfHasErrors)
+	}
+
+	// 比對 data 部分（使用深度比對，但忽略順序差異）
+	if deepEqualData(targetResp.Data, selfResp.Data) {
 		return true, ""
 	}
-	return false, "body differ"
+
+	// 如果 data 不同，嘗試提供更詳細的差異資訊
+	diff := findDataDifference(targetResp.Data, selfResp.Data)
+	if diff != "" {
+		return false, fmt.Sprintf("data differ: %s", diff)
+	}
+	return false, "data structure differs"
+}
+
+// isEmptyValue 檢查值是否為空（nil, 空陣列, 空 map）
+func isEmptyValue(v interface{}) bool {
+	if v == nil {
+		return true
+	}
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Slice, reflect.Array, reflect.Map:
+		return rv.Len() == 0
+	case reflect.String:
+		return rv.Len() == 0
+	}
+	return false
+}
+
+// deepEqualData 比對兩個 data 物件，忽略 JSON 欄位順序
+func deepEqualData(a, b interface{}) bool {
+	// 先做標準深度比對
+	if reflect.DeepEqual(a, b) {
+		return true
+	}
+
+	// 如果都是 map，遞迴比對每個 key
+	aMap, aIsMap := a.(map[string]interface{})
+	bMap, bIsMap := b.(map[string]interface{})
+	if aIsMap && bIsMap {
+		if len(aMap) != len(bMap) {
+			return false
+		}
+		for k, av := range aMap {
+			bv, ok := bMap[k]
+			if !ok {
+				return false
+			}
+			if !deepEqualData(av, bv) {
+				return false
+			}
+		}
+		return true
+	}
+
+	// 如果都是 slice，比對每個元素
+	aSlice, aIsSlice := a.([]interface{})
+	bSlice, bIsSlice := b.([]interface{})
+	if aIsSlice && bIsSlice {
+		if len(aSlice) != len(bSlice) {
+			return false
+		}
+		// 對 slice 做寬鬆比對：允許順序不同（如果元素可比較）
+		matched := make([]bool, len(bSlice))
+		for _, ae := range aSlice {
+			found := false
+			for i, be := range bSlice {
+				if !matched[i] && deepEqualData(ae, be) {
+					matched[i] = true
+					found = true
+					break
+				}
+			}
+			if !found {
+				return false
+			}
+		}
+		return true
+	}
+
+	return false
+}
+
+// findDataDifference 找出 data 差異的簡要描述
+func findDataDifference(a, b interface{}) string {
+	aMap, aIsMap := a.(map[string]interface{})
+	bMap, bIsMap := b.(map[string]interface{})
+	if aIsMap && bIsMap {
+		for k := range aMap {
+			if _, ok := bMap[k]; !ok {
+				return fmt.Sprintf("missing key in self: %s", k)
+			}
+		}
+		for k := range bMap {
+			if _, ok := aMap[k]; !ok {
+				return fmt.Sprintf("extra key in self: %s", k)
+			}
+		}
+	}
+	return "structure or value differs"
 }
 
 func normalizeJSON(raw []byte) (interface{}, error) {
@@ -530,4 +645,109 @@ func normalizeJSON(raw []byte) (interface{}, error) {
 		return nil, err
 	}
 	return v, nil
+}
+
+// probeSampleVars 從 target GraphQL 取一組實際存在的 post / external / partner 參考值，
+// 以避免硬編 id / slug 造成 400 或比對失敗。
+func probeSampleVars(client *http.Client, target string) map[string]string {
+	out := map[string]string{}
+
+	type gqlPayload struct {
+		Query     string                 `json:"query"`
+		Variables map[string]interface{} `json:"variables,omitempty"`
+	}
+	type gqlResponse struct {
+		Data   map[string]json.RawMessage `json:"data"`
+		Errors interface{}                `json:"errors"`
+	}
+
+	// 1) 抓一篇 post（已發佈）
+	postReqBody := gqlPayload{
+		Query: `query ($take:Int,$skip:Int,$orderBy:[PostOrderByInput!]!,$filter:PostWhereInput!){
+  posts(take:$take,skip:$skip,orderBy:$orderBy,where:$filter){
+    id
+    slug
+  }
+}`,
+		Variables: map[string]interface{}{
+			"take":    1,
+			"skip":    0,
+			"orderBy": []map[string]string{{"publishedDate": "desc"}},
+			"filter": map[string]interface{}{
+				"state": map[string]interface{}{"equals": "published"},
+			},
+		},
+	}
+	if b, err := json.Marshal(postReqBody); err == nil {
+		if req, err := http.NewRequest(http.MethodPost, target, bytes.NewReader(b)); err == nil {
+			req.Header.Set("Content-Type", "application/json")
+			if resp, err := client.Do(req); err == nil {
+				body, _ := io.ReadAll(resp.Body)
+				resp.Body.Close()
+				var gr gqlResponse
+				if err := json.Unmarshal(body, &gr); err == nil && gr.Data != nil {
+					if rawPosts, ok := gr.Data["posts"]; ok {
+						var posts []struct {
+							ID   string `json:"id"`
+							Slug string `json:"slug"`
+						}
+						if err := json.Unmarshal(rawPosts, &posts); err == nil && len(posts) > 0 {
+							out["postID"] = posts[0].ID
+							out["postSlug"] = posts[0].Slug
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// 2) 抓一篇 external（已發佈，且有 partner）
+	extReqBody := gqlPayload{
+		Query: `query ($take:Int,$skip:Int,$orderBy:[ExternalOrderByInput!]!,$filter:ExternalWhereInput!){
+  externals(take:$take,skip:$skip,orderBy:$orderBy,where:$filter){
+    id
+    slug
+    partner{ slug }
+  }
+}`,
+		Variables: map[string]interface{}{
+			"take":    1,
+			"skip":    0,
+			"orderBy": []map[string]string{{"publishedDate": "desc"}},
+			"filter": map[string]interface{}{
+				"state":         map[string]interface{}{"equals": "published"},
+				"publishedDate": map[string]interface{}{"not": map[string]interface{}{"equals": nil}},
+			},
+		},
+	}
+	if b, err := json.Marshal(extReqBody); err == nil {
+		if req, err := http.NewRequest(http.MethodPost, target, bytes.NewReader(b)); err == nil {
+			req.Header.Set("Content-Type", "application/json")
+			if resp, err := client.Do(req); err == nil {
+				body, _ := io.ReadAll(resp.Body)
+				resp.Body.Close()
+				var gr gqlResponse
+				if err := json.Unmarshal(body, &gr); err == nil && gr.Data != nil {
+					if rawExts, ok := gr.Data["externals"]; ok {
+						var exts []struct {
+							ID      string `json:"id"`
+							Slug    string `json:"slug"`
+							Partner *struct {
+								Slug string `json:"slug"`
+							} `json:"partner"`
+						}
+						if err := json.Unmarshal(rawExts, &exts); err == nil && len(exts) > 0 {
+							out["externalID"] = exts[0].ID
+							out["externalSlug"] = exts[0].Slug
+							if exts[0].Partner != nil {
+								out["partnerSlug"] = exts[0].Partner.Slug
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return out
 }
