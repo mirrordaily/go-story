@@ -115,8 +115,8 @@ type Post struct {
 	HeroCaption            string         `json:"heroCaption"`
 	Brief                  map[string]any `json:"brief"`
 	// ApiData / ApiDataBrief 對應 Lilith hooks 中 draftConverter 產生的 JSON 結構
-	ApiDataBrief         map[string]any `json:"apiDataBrief"`
-	ApiData              map[string]any `json:"apiData"`
+	ApiDataBrief         interface{}    `json:"apiDataBrief"`
+	ApiData              interface{}    `json:"apiData"`
 	TrimmedContent       map[string]any `json:"trimmedContent"`
 	Content              map[string]any `json:"content"`
 	Relateds             []Post         `json:"relateds"`
@@ -485,8 +485,8 @@ func (r *Repo) QueryPosts(ctx context.Context, where *PostWhereInput, orders []O
 			p.UpdatedAt = updatedAt.Time.UTC().Format(timeLayoutMilli)
 		}
 		p.Brief = decodeJSONBytes(briefRaw)
-		p.ApiDataBrief = decodeJSONBytes(apiDataBrief)
-		p.ApiData = decodeJSONBytes(apiData)
+		p.ApiDataBrief = decodeJSONBytesAny(apiDataBrief)
+		p.ApiData = decodeJSONBytesAny(apiData)
 		p.Content = decodeJSONBytes(contentRaw)
 		p.TrimmedContent = p.Content
 		p.Metadata = map[string]any{
@@ -983,9 +983,11 @@ func (r *Repo) QueryExternalByID(ctx context.Context, id string) (*External, err
 
 	// 補上 partner 與 tags（與 QueryExternals 的行為一致）
 	if pid := getMetaInt(ext.Metadata, "partnerID"); pid > 0 {
-		partners, _ := r.fetchPartners(ctx, []int{pid})
-		if p, ok := partners[pid]; ok {
-			ext.Partner = p
+		partners, err := r.fetchPartners(ctx, []int{pid})
+		if err == nil {
+			if p, ok := partners[pid]; ok {
+				ext.Partner = p
+			}
 		}
 	}
 	tagsMap, _ := r.fetchExternalTags(ctx, "_External_tags", []int{dbID})
@@ -1046,6 +1048,17 @@ func decodeJSONBytes(raw []byte) map[string]any {
 		return nil
 	}
 	return m
+}
+
+func decodeJSONBytesAny(raw []byte) interface{} {
+	if len(raw) == 0 {
+		return nil
+	}
+	var v interface{}
+	if err := json.Unmarshal(raw, &v); err != nil {
+		return nil
+	}
+	return v
 }
 
 func nullableInt(v sql.NullInt64) int {
