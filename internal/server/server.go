@@ -85,46 +85,59 @@ func ProbeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type compare struct {
-		Name            string          `json:"name"`
-		Match           bool            `json:"match"`
-		Query           string          `json:"query,omitempty"` // 完整的 GraphQL query
-		TargetStatus    int             `json:"targetStatus"`
-		SelfStatus      int             `json:"selfStatus"`
-		TargetError     string          `json:"targetError,omitempty"`
-		SelfError       string          `json:"selfError,omitempty"`
-		TargetGQLErrors []string        `json:"targetGQLErrors,omitempty"`
-		SelfGQLErrors   []string        `json:"selfGQLErrors,omitempty"`
-		TargetBody      json.RawMessage `json:"targetBody,omitempty"` // 完整的 target response body
-		SelfBody        json.RawMessage `json:"selfBody,omitempty"`   // 完整的 self response body
-		Note            string          `json:"note,omitempty"`
+		Name            string   `json:"name"`
+		Match           bool     `json:"match"`
+		TargetStatus    int      `json:"targetStatus,omitempty"`
+		SelfStatus      int      `json:"selfStatus,omitempty"`
+		TargetError     string   `json:"targetError,omitempty"`
+		SelfError       string   `json:"selfError,omitempty"`
+		TargetGQLErrors []string `json:"targetGQLErrors,omitempty"`
+		SelfGQLErrors   []string `json:"selfGQLErrors,omitempty"`
+		Note            string   `json:"note,omitempty"`
 	}
 
-	results := []compare{}
+	allResults := []compare{}
+	mismatches := []compare{}
 	for _, tr := range targetResults {
 		sr := selfMap[tr.Name]
 		match, note := compareBodies(tr, sr)
-		results = append(results, compare{
+		result := compare{
 			Name:            tr.Name,
 			Match:           match,
-			Query:           tr.Query, // 顯示完整的 GraphQL query
 			TargetStatus:    tr.StatusCode,
 			SelfStatus:      sr.StatusCode,
 			TargetError:     tr.Error,
 			SelfError:       sr.Error,
 			TargetGQLErrors: tr.GQLErrors,
 			SelfGQLErrors:   sr.GQLErrors,
-			TargetBody:      tr.Body, // 顯示完整的 target response body
-			SelfBody:        sr.Body, // 顯示完整的 self response body
 			Note:            note,
-		})
+		}
+		allResults = append(allResults, result)
+		if !match {
+			mismatches = append(mismatches, result)
+		}
+	}
+
+	total := len(allResults)
+	matched := total - len(mismatches)
+
+	response := map[string]any{
+		"target": payload.URL,
+		"self":   selfURL,
+		"summary": map[string]int{
+			"total":    total,
+			"matched":  matched,
+			"mismatch": len(mismatches),
+		},
+	}
+
+	// 只顯示不 match 的結果
+	if len(mismatches) > 0 {
+		response["mismatches"] = mismatches
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"target":  payload.URL,
-		"self":    selfURL,
-		"results": results,
-	})
+	_ = json.NewEncoder(w).Encode(response)
 }
 
 func runProbeTests(target string) []ProbeResult {
