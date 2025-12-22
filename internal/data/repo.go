@@ -265,6 +265,30 @@ func DecodePostWhereUnique(input interface{}) (*PostWhereUniqueInput, error) {
 	if input == nil {
 		return nil, nil
 	}
+	// GraphQL ID 可能以 string 或數字形式傳入（特別是在 probe 時我們會傳 Int 給 target），
+	// 這裡手動處理 id 欄位，確保最終轉成字串，避免出現空字串導致 SQL 轉型錯誤。
+	if m, ok := input.(map[string]interface{}); ok {
+		if rawID, ok2 := m["id"]; ok2 && rawID != nil {
+			var idStr string
+			switch v := rawID.(type) {
+			case string:
+				idStr = v
+			case int:
+				idStr = strconv.Itoa(v)
+			case int64:
+				idStr = strconv.FormatInt(v, 10)
+			case float64:
+				idStr = strconv.FormatInt(int64(v), 10)
+			default:
+				idStr = fmt.Sprintf("%v", v)
+			}
+			if idStr != "" {
+				return &PostWhereUniqueInput{ID: &idStr}, nil
+			}
+		}
+	}
+
+	// 回退到一般的 mapstructure 解碼（主要支援 slug 等欄位）
 	var where PostWhereUniqueInput
 	if err := decodeInto(input, &where); err != nil {
 		return nil, fmt.Errorf("post unique where: %w", err)
@@ -894,6 +918,7 @@ func (r *Repo) QueryExternalsCount(ctx context.Context, where *ExternalWhereInpu
 // 為了同時支援：
 //   - 前端以字串形式傳入的 ID（例如 "1378586"）
 //   - GraphQL 解析變數時產生的科學記號字串（例如 "1.378586e+06"）
+//
 // 這裡統一將傳入的 id 轉成整數後再帶入 SQL。
 func (r *Repo) QueryExternalByID(ctx context.Context, id string) (*External, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
