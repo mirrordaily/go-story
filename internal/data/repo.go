@@ -1190,7 +1190,12 @@ func (r *Repo) enrichPosts(ctx context.Context, posts []Post) error {
 
 	tagsMap, _ := r.fetchTags(ctx, "_Post_tags", postIDs)
 	tagsAlgoMap, _ := r.fetchTags(ctx, "_Post_tags_algo", postIDs)
-	warningsMap, _ := r.fetchPostWarnings(ctx, postIDs)
+	warningsMap, err := r.fetchPostWarnings(ctx, postIDs)
+	if err != nil {
+		// 如果查詢失敗，記錄錯誤但繼續處理（可能是表不存在或其他問題）
+		// 在開發環境中可以考慮記錄日誌
+		_ = err
+	}
 
 	relatedsMap, relatedImageIDs, err := r.fetchRelatedPosts(ctx, postIDs)
 	if err != nil {
@@ -1401,9 +1406,11 @@ func (r *Repo) fetchPostWarnings(ctx context.Context, postIDs []int) (map[int][]
 	for rows.Next() {
 		var pid int
 		var w Warning
-		if err := rows.Scan(&pid, &w.ID, &w.Content); err != nil {
+		var warningID int
+		if err := rows.Scan(&pid, &warningID, &w.Content); err != nil {
 			return result, err
 		}
+		w.ID = strconv.Itoa(warningID)
 		result[pid] = append(result[pid], w)
 	}
 	return result, rows.Err()
