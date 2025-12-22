@@ -651,6 +651,30 @@ func findDataDifferenceRecursive(a, b interface{}, path string) string {
 	bSlice, bIsSlice := b.([]interface{})
 	if aIsSlice && bIsSlice {
 		if len(aSlice) != len(bSlice) {
+			// 陣列長度不同時，顯示更詳細的資訊
+			targetPreview := ""
+			selfPreview := ""
+			if len(aSlice) > 0 {
+				if preview, err := json.Marshal(aSlice[0]); err == nil {
+					if len(preview) > 100 {
+						targetPreview = string(preview[:100]) + "..."
+					} else {
+						targetPreview = string(preview)
+					}
+				}
+			}
+			if len(bSlice) > 0 {
+				if preview, err := json.Marshal(bSlice[0]); err == nil {
+					if len(preview) > 100 {
+						selfPreview = string(preview[:100]) + "..."
+					} else {
+						selfPreview = string(preview)
+					}
+				}
+			}
+			if targetPreview != "" || selfPreview != "" {
+				return fmt.Sprintf("array length differs at %s: target=%d (first: %s), self=%d (first: %s)", path, len(aSlice), targetPreview, len(bSlice), selfPreview)
+			}
 			return fmt.Sprintf("array length differs at %s: target=%d, self=%d", path, len(aSlice), len(bSlice))
 		}
 		// 檢查每個元素

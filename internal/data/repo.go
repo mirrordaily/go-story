@@ -1634,11 +1634,14 @@ func (r *Repo) buildResizedURLs(fileID, ext string) Resized {
 	}
 	host := strings.TrimSuffix(r.staticsHost, "/")
 	makeURL := func(size string, extension string) string {
-		path := fmt.Sprintf("images/%s", fileID)
+		// staticsHost 已經包含 images 路徑，不需要再加 images/ 前綴
+		// 如果 target 的 w1200 是空字串，表示可能不需要生成該尺寸的 URL
+		// 但我們還是生成，以保持一致性
+		filename := fileID
 		if size != "" {
-			path = fmt.Sprintf("images/%s-%s", fileID, size)
+			filename = fmt.Sprintf("%s-%s", fileID, size)
 		}
-		return fmt.Sprintf("%s/%s.%s", host, path, extension)
+		return fmt.Sprintf("%s/%s.%s", host, filename, extension)
 	}
 	return Resized{
 		Original: makeURL("", ext),
