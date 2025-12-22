@@ -122,7 +122,174 @@ func ProbeHandler(w http.ResponseWriter, r *http.Request) {
 func runProbeTests(target string) []ProbeResult {
 	client := &http.Client{Timeout: 10 * time.Second}
 
-	const postGQL = `query GetPostsBySectionSlug(
+	// 簡化版 postGQL：只保留 GetPostById，移除所有 fragments 和 OR 查詢
+	const postGQL = `query GetPostById($id: ID!) {
+  post(where: { id: $id }) {
+    id
+    title
+    subtitle
+    heroCaption
+    publishedDate
+    hiddenAdvertised
+    heroImage {
+      id
+      imageFile {
+        width
+        height
+      }
+      resized {
+        original
+        w480
+        w800
+        w1200
+        w1600
+        w2400
+      }
+      resizedWebp {
+        original
+        w480
+        w800
+        w1200
+        w1600
+        w2400
+      }
+    }
+    og_image {
+      id
+      imageFile {
+        width
+        height
+      }
+      resized {
+        original
+        w480
+        w800
+        w1200
+        w1600
+        w2400
+      }
+      resizedWebp {
+        original
+        w480
+        w800
+        w1200
+        w1600
+        w2400
+      }
+    }
+    tags {
+      slug
+      name
+    }
+    tags_algo {
+      slug
+      name
+    }
+    sections {
+      name
+      color
+      slug
+    }
+    categories {
+      name
+      slug
+    }
+    writers {
+      id
+      name
+    }
+    photographers {
+      id
+      name
+    }
+    designers {
+      id
+      name
+    }
+    engineers {
+      id
+      name
+    }
+    apiData
+    apiDataBrief
+    Warning {
+      id
+      content
+    }
+    Warnings {
+      id
+      content
+    }
+    isAdult
+  }
+}
+
+query GetRelatedPostsById($id: ID!) {
+  post(where: { id: $id }) {
+    relatedsOne {
+      id
+      slug
+      title
+      heroImage {
+        id
+        imageFile {
+          width
+          height
+        }
+        resized {
+          original
+          w480
+          w800
+          w1200
+          w1600
+          w2400
+        }
+      }
+    }
+    relatedsTwo {
+      id
+      slug
+      title
+      heroImage {
+        id
+        imageFile {
+          width
+          height
+        }
+        resized {
+          original
+          w480
+          w800
+          w1200
+          w1600
+          w2400
+        }
+      }
+    }
+    relateds {
+      id
+      slug
+      title
+      heroImage {
+        id
+        imageFile {
+          width
+          height
+        }
+        resized {
+          original
+          w480
+          w800
+          w1200
+          w1600
+          w2400
+        }
+      }
+    }
+  }
+}
+
+const postGQLOriginal = `query GetPostsBySectionSlug(
   $skip: Int!
   $take: Int
   $slug: String!
@@ -356,7 +523,24 @@ query GetRelatedPostsById($id: ID!) {
 query GetRelatedPostsByExternalId($id: ID!) {
   external(where: { id: $id }) {
     relateds {
-      ...RelatedPost
+      id
+      slug
+      title
+      heroImage {
+        id
+        imageFile {
+          width
+          height
+        }
+        resized {
+          original
+          w480
+          w800
+          w1200
+          w1600
+          w2400
+        }
+      }
     }
   }
 }
@@ -398,7 +582,7 @@ query GetExternalsByPartnerSlug(
 		{
 			name: "posts_list",
 			body: map[string]any{
-				"query": `query ($take:Int,$skip:Int,$orderBy:[PostOrderByInput],$filter:PostWhereInput){
+				"query": `query ($take:Int,$skip:Int,$orderBy:[PostOrderByInput!]!,$filter:PostWhereInput!){
 					postsCount(where:$filter)
 					posts(take:$take,skip:$skip,orderBy:$orderBy,where:$filter){
 						id slug title publishedDate state
@@ -428,7 +612,11 @@ query GetExternalsByPartnerSlug(
 		{
 			name: "post_by_slug",
 			body: map[string]any{
-				"query": `query ($slug:String){ post(where:{slug:$slug}){ id slug title state } }`,
+				"query": `query ($slug:String){ 
+					posts(where:{slug:{equals:$slug}}){
+						id slug title state 
+					} 
+				}`,
 				"variables": map[string]any{
 					"slug": postSlug,
 				},
@@ -437,7 +625,7 @@ query GetExternalsByPartnerSlug(
 		{
 			name: "externals_list",
 			body: map[string]any{
-				"query": `query ($take:Int,$skip:Int,$orderBy:[ExternalOrderByInput],$filter:ExternalWhereInput){
+				"query": `query ($take:Int,$skip:Int,$orderBy:[ExternalOrderByInput!]!,$filter:ExternalWhereInput!){
 					externals(take:$take,skip:$skip,orderBy:$orderBy,where:$filter){
 						id slug title thumb brief publishedDate partner{ id slug name showOnIndex }
 					}
@@ -459,7 +647,7 @@ query GetExternalsByPartnerSlug(
 				"query": `query ($slug:String){
 					externals(where:{slug:{equals:$slug},state:{equals:"published"}}){
 						id slug title thumb brief content publishedDate extend_byline thumbCaption
-						partner{ id slug name showOnIndex showThumb showBrief }
+						partner{ id slug name showOnIndex }
 						updatedAt
 					}
 				}`,

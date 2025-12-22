@@ -365,11 +365,12 @@ func (r *Repo) QueryPosts(ctx context.Context, where *PostWhereInput, orders []O
 				args = append(args, *where.Categories.Some.State.Equals)
 				argIdx++
 			}
-			if where.Categories.Some.IsMemberOnly != nil && where.Categories.Some.IsMemberOnly.Equals != nil {
-				sub += fmt.Sprintf(" AND c.\"isMemberOnly\" = $%d", argIdx)
-				args = append(args, *where.Categories.Some.IsMemberOnly.Equals)
-				argIdx++
-			}
+			// isMemberOnly 欄位在資料庫中不存在，跳過此過濾條件
+			// if where.Categories.Some.IsMemberOnly != nil && where.Categories.Some.IsMemberOnly.Equals != nil {
+			// 	sub += fmt.Sprintf(" AND c.\"isMemberOnly\" = $%d", argIdx)
+			// 	args = append(args, *where.Categories.Some.IsMemberOnly.Equals)
+			// 	argIdx++
+			// }
 			sub += ")"
 			conds = append(conds, sub)
 		}
@@ -559,11 +560,12 @@ func (r *Repo) QueryPostsCount(ctx context.Context, where *PostWhereInput) (int,
 				args = append(args, *where.Categories.Some.State.Equals)
 				argIdx++
 			}
-			if where.Categories.Some.IsMemberOnly != nil && where.Categories.Some.IsMemberOnly.Equals != nil {
-				sub += fmt.Sprintf(" AND c.\"isMemberOnly\" = $%d", argIdx)
-				args = append(args, *where.Categories.Some.IsMemberOnly.Equals)
-				argIdx++
-			}
+			// isMemberOnly 欄位在資料庫中不存在，跳過此過濾條件
+			// if where.Categories.Some.IsMemberOnly != nil && where.Categories.Some.IsMemberOnly.Equals != nil {
+			// 	sub += fmt.Sprintf(" AND c.\"isMemberOnly\" = $%d", argIdx)
+			// 	args = append(args, *where.Categories.Some.IsMemberOnly.Equals)
+			// 	argIdx++
+			// }
 			sub += ")"
 			conds = append(conds, sub)
 		}
@@ -1208,7 +1210,7 @@ func (r *Repo) fetchCategories(ctx context.Context, postIDs []int) (map[int][]Ca
 	if len(postIDs) == 0 {
 		return result, nil
 	}
-	query := `SELECT cp."B" as post_id, c.id, c.name, c.slug, c.state, c."isMemberOnly" FROM "_Category_posts" cp JOIN "Category" c ON c.id = cp."A" WHERE cp."B" = ANY($1)`
+	query := `SELECT cp."B" as post_id, c.id, c.name, c.slug, c.state FROM "_Category_posts" cp JOIN "Category" c ON c.id = cp."A" WHERE cp."B" = ANY($1)`
 	rows, err := r.db.QueryContext(ctx, query, pqIntArray(postIDs))
 	if err != nil {
 		return result, err
@@ -1217,9 +1219,11 @@ func (r *Repo) fetchCategories(ctx context.Context, postIDs []int) (map[int][]Ca
 	for rows.Next() {
 		var pid int
 		var c Category
-		if err := rows.Scan(&pid, &c.ID, &c.Name, &c.Slug, &c.State, &c.IsMemberOnly); err != nil {
+		if err := rows.Scan(&pid, &c.ID, &c.Name, &c.Slug, &c.State); err != nil {
 			return result, err
 		}
+		// isMemberOnly 欄位在資料庫中不存在，設為預設值 false
+		c.IsMemberOnly = false
 		result[pid] = append(result[pid], c)
 	}
 	return result, rows.Err()
