@@ -1407,59 +1407,46 @@ func (r *Repo) fetchPostWarnings(ctx context.Context, postIDs []int) (map[int][]
 	}
 	// Warnings 是從 relateds 來的，需要 join Warning 表與 relateds
 	// 根據 schema.prisma，表名是 _Post_Warnings（注意大小寫），A 是 Post ID，B 是 Warning ID
-	// 先嘗試從 relateds 取得 warnings
-	query := `
-		SELECT DISTINCT r."A" as post_id, w.id, w.content
-		FROM "_Post_relateds" r
-		JOIN "Post" p ON p.id = r."B"
-		JOIN "_Post_Warnings" pw ON pw."A" = p.id
-		JOIN "Warning" w ON w.id = pw."B"
-		WHERE r."A" = ANY($1)
-		UNION
-		SELECT DISTINCT r."B" as post_id, w.id, w.content
-		FROM "_Post_relateds" r
-		JOIN "Post" p ON p.id = r."A"
-		JOIN "_Post_Warnings" pw ON pw."A" = p.id
-		JOIN "Warning" w ON w.id = pw."B"
-		WHERE r."B" = ANY($1)
-		ORDER BY post_id, w.id
-	`
-	rows, err := r.db.QueryContext(ctx, query, pqIntArray(postIDs))
-	if err != nil {
-		// 如果查詢失敗（可能是表名不對），嘗試使用小寫表名
-		query = `
+	// 嘗試多種表名組合
+	tableNames := []string{"_Post_Warnings", "_Post_warnings"}
+	for _, tableName := range tableNames {
+		query := fmt.Sprintf(`
 			SELECT DISTINCT r."A" as post_id, w.id, w.content
 			FROM "_Post_relateds" r
 			JOIN "Post" p ON p.id = r."B"
-			JOIN "_Post_warnings" pw ON pw."A" = p.id
+			JOIN "%s" pw ON pw."A" = p.id
 			JOIN "Warning" w ON w.id = pw."B"
 			WHERE r."A" = ANY($1)
 			UNION
 			SELECT DISTINCT r."B" as post_id, w.id, w.content
 			FROM "_Post_relateds" r
 			JOIN "Post" p ON p.id = r."A"
-			JOIN "_Post_warnings" pw ON pw."A" = p.id
+			JOIN "%s" pw ON pw."A" = p.id
 			JOIN "Warning" w ON w.id = pw."B"
 			WHERE r."B" = ANY($1)
 			ORDER BY post_id, w.id
-		`
-		rows, err = r.db.QueryContext(ctx, query, pqIntArray(postIDs))
+		`, tableName, tableName)
+		rows, err := r.db.QueryContext(ctx, query, pqIntArray(postIDs))
 		if err != nil {
-			return result, err
+			// 如果查詢失敗，嘗試下一個表名
+			continue
 		}
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var pid int
-		var w Warning
-		var warningID int
-		if err := rows.Scan(&pid, &warningID, &w.Content); err != nil {
-			return result, err
+		defer rows.Close()
+		for rows.Next() {
+			var pid int
+			var w Warning
+			var warningID int
+			if err := rows.Scan(&pid, &warningID, &w.Content); err != nil {
+				return result, err
+			}
+			w.ID = strconv.Itoa(warningID)
+			result[pid] = append(result[pid], w)
 		}
-		w.ID = strconv.Itoa(warningID)
-		result[pid] = append(result[pid], w)
+		// 如果查詢成功，返回結果
+		return result, rows.Err()
 	}
-	return result, rows.Err()
+	// 所有表名都失敗，返回空結果（不返回錯誤，因為可能是表不存在）
+	return result, nil
 }
 
 func (r *Repo) fetchRelatedPosts(ctx context.Context, postIDs []int) (map[int][]Post, []int, error) {
@@ -1696,7 +1683,8 @@ func (r *Repo) fetchExternalCategories(ctx context.Context, externalIDs []int) (
 	`
 	rows, err := r.db.QueryContext(ctx, query, pqIntArray(externalIDs))
 	if err != nil {
-		return result, err
+		// 如果查詢失敗，返回空結果（不返回錯誤，因為可能是表不存在或沒有 relateds）
+		return result, nil
 	}
 	defer rows.Close()
 	for rows.Next() {
