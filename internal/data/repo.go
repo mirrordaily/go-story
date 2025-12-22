@@ -1406,26 +1406,47 @@ func (r *Repo) fetchPostWarnings(ctx context.Context, postIDs []int) (map[int][]
 		return result, nil
 	}
 	// Warnings 是從 relateds 來的，需要 join Warning 表與 relateds
-	// 根據 schema.prisma，表名是 _Post_warnings（與其他表名保持一致，使用小寫），A 是 Post ID，B 是 Warning ID
+	// 根據 schema.prisma，表名是 _Post_Warnings（注意大小寫），A 是 Post ID，B 是 Warning ID
+	// 先嘗試從 relateds 取得 warnings
 	query := `
 		SELECT DISTINCT r."A" as post_id, w.id, w.content
 		FROM "_Post_relateds" r
 		JOIN "Post" p ON p.id = r."B"
-		JOIN "_Post_warnings" pw ON pw."A" = p.id
+		JOIN "_Post_Warnings" pw ON pw."A" = p.id
 		JOIN "Warning" w ON w.id = pw."B"
 		WHERE r."A" = ANY($1)
 		UNION
 		SELECT DISTINCT r."B" as post_id, w.id, w.content
 		FROM "_Post_relateds" r
 		JOIN "Post" p ON p.id = r."A"
-		JOIN "_Post_warnings" pw ON pw."A" = p.id
+		JOIN "_Post_Warnings" pw ON pw."A" = p.id
 		JOIN "Warning" w ON w.id = pw."B"
 		WHERE r."B" = ANY($1)
 		ORDER BY post_id, w.id
 	`
 	rows, err := r.db.QueryContext(ctx, query, pqIntArray(postIDs))
 	if err != nil {
-		return result, err
+		// 如果查詢失敗（可能是表名不對），嘗試使用小寫表名
+		query = `
+			SELECT DISTINCT r."A" as post_id, w.id, w.content
+			FROM "_Post_relateds" r
+			JOIN "Post" p ON p.id = r."B"
+			JOIN "_Post_warnings" pw ON pw."A" = p.id
+			JOIN "Warning" w ON w.id = pw."B"
+			WHERE r."A" = ANY($1)
+			UNION
+			SELECT DISTINCT r."B" as post_id, w.id, w.content
+			FROM "_Post_relateds" r
+			JOIN "Post" p ON p.id = r."A"
+			JOIN "_Post_warnings" pw ON pw."A" = p.id
+			JOIN "Warning" w ON w.id = pw."B"
+			WHERE r."B" = ANY($1)
+			ORDER BY post_id, w.id
+		`
+		rows, err = r.db.QueryContext(ctx, query, pqIntArray(postIDs))
+		if err != nil {
+			return result, err
+		}
 	}
 	defer rows.Close()
 	for rows.Next() {
@@ -1600,7 +1621,8 @@ func (r *Repo) fetchPartners(ctx context.Context, ids []int) (map[int]*Partner, 
 	if len(ids) == 0 {
 		return result, nil
 	}
-	rows, err := r.db.QueryContext(ctx, `SELECT id, slug, name, "showOnIndex", COALESCE("showThumb", true), COALESCE("showBrief", false) FROM "Partner" WHERE id = ANY($1)`, pqIntArray(ids))
+	// 根據 schema.prisma，Partner 只有 id, slug, name, showOnIndex 欄位
+	rows, err := r.db.QueryContext(ctx, `SELECT id, slug, name, "showOnIndex" FROM "Partner" WHERE id = ANY($1)`, pqIntArray(ids))
 	if err != nil {
 		return result, err
 	}
@@ -1608,7 +1630,7 @@ func (r *Repo) fetchPartners(ctx context.Context, ids []int) (map[int]*Partner, 
 	for rows.Next() {
 		var p Partner
 		var dbID int
-		if err := rows.Scan(&dbID, &p.Slug, &p.Name, &p.ShowOnIndex, &p.ShowThumb, &p.ShowBrief); err != nil {
+		if err := rows.Scan(&dbID, &p.Slug, &p.Name, &p.ShowOnIndex); err != nil {
 			return result, err
 		}
 		p.ID = strconv.Itoa(dbID)
@@ -1662,6 +1684,7 @@ func (r *Repo) fetchExternalCategories(ctx context.Context, externalIDs []int) (
 	}
 	// categories 是從 relateds 來的，需要 join Category 表與 relateds
 	// 根據 schema.prisma，External 的 relateds 是 Post[]，所以從 related posts 的 categories 取得
+	// 先嘗試從 relateds 取得 categories
 	query := `
 		SELECT DISTINCT er."A" as external_id, c.id, c.name, c.slug, c.state
 		FROM "_External_relateds" er
