@@ -1406,15 +1406,16 @@ func (r *Repo) fetchPostWarnings(ctx context.Context, postIDs []int) (map[int][]
 		return result, nil
 	}
 	// Warnings 是從 relateds 來的，需要 join Warning 表與 relateds
+	// 根據 schema.prisma，表名是 _Post_warnings（與其他表名保持一致，使用小寫），A 是 Post ID，B 是 Warning ID
 	query := `
-		SELECT r."A" as post_id, w.id, w.content
+		SELECT DISTINCT r."A" as post_id, w.id, w.content
 		FROM "_Post_relateds" r
 		JOIN "Post" p ON p.id = r."B"
 		JOIN "_Post_warnings" pw ON pw."A" = p.id
 		JOIN "Warning" w ON w.id = pw."B"
 		WHERE r."A" = ANY($1)
 		UNION
-		SELECT r."B" as post_id, w.id, w.content
+		SELECT DISTINCT r."B" as post_id, w.id, w.content
 		FROM "_Post_relateds" r
 		JOIN "Post" p ON p.id = r."A"
 		JOIN "_Post_warnings" pw ON pw."A" = p.id
@@ -1660,12 +1661,13 @@ func (r *Repo) fetchExternalCategories(ctx context.Context, externalIDs []int) (
 		return result, nil
 	}
 	// categories 是從 relateds 來的，需要 join Category 表與 relateds
+	// 根據 schema.prisma，External 的 relateds 是 Post[]，所以從 related posts 的 categories 取得
 	query := `
 		SELECT DISTINCT er."A" as external_id, c.id, c.name, c.slug, c.state
 		FROM "_External_relateds" er
 		JOIN "Post" p ON p.id = er."B"
-		JOIN "_Post_categories" pc ON pc."A" = p.id
-		JOIN "Category" c ON c.id = pc."B"
+		JOIN "_Category_posts" cp ON cp."B" = p.id
+		JOIN "Category" c ON c.id = cp."A"
 		WHERE er."A" = ANY($1)
 		ORDER BY er."A", c.id
 	`
