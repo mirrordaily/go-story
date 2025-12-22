@@ -858,7 +858,11 @@ func (r *Repo) QueryExternals(ctx context.Context, where *ExternalWhereInput, or
 	partners, _ := r.fetchPartners(ctx, partnerIDs)
 	tagsMap, _ := r.fetchExternalTags(ctx, "_External_tags", externalIDs)
 	sectionsMap, _ := r.fetchExternalSections(ctx, externalIDs)
-	categoriesMap, _ := r.fetchExternalCategories(ctx, externalIDs)
+	categoriesMap, err := r.fetchExternalCategories(ctx, externalIDs)
+	if err != nil {
+		// 查詢失敗時記錄錯誤，但繼續處理
+		_ = err
+	}
 	relatedsMap, _, _ := r.fetchExternalRelateds(ctx, externalIDs)
 	for i := range result {
 		if pid := getMetaInt(result[i].Metadata, "partnerID"); pid > 0 {
@@ -1025,7 +1029,11 @@ func (r *Repo) QueryExternalByID(ctx context.Context, id string) (*External, err
 	} else {
 		ext.Sections = []Section{}
 	}
-	categoriesMap, _ := r.fetchExternalCategories(ctx, []int{dbID})
+	categoriesMap, err := r.fetchExternalCategories(ctx, []int{dbID})
+	if err != nil {
+		// 查詢失敗時記錄錯誤，但繼續處理
+		_ = err
+	}
 	if categories, ok := categoriesMap[dbID]; ok {
 		ext.Categories = categories
 	} else {
@@ -1397,7 +1405,23 @@ func (r *Repo) fetchPostWarnings(ctx context.Context, postIDs []int) (map[int][]
 	if len(postIDs) == 0 {
 		return result, nil
 	}
-	query := `SELECT pw."A" as post_id, w.id, w.content FROM "_Post_warnings" pw JOIN "Warning" w ON w.id = pw."B" WHERE pw."A" = ANY($1) ORDER BY pw."A", pw."B"`
+	// Warnings 是從 relateds 來的，需要 join Warning 表與 relateds
+	query := `
+		SELECT r."A" as post_id, w.id, w.content
+		FROM "_Post_relateds" r
+		JOIN "Post" p ON p.id = r."B"
+		JOIN "_Post_warnings" pw ON pw."A" = p.id
+		JOIN "Warning" w ON w.id = pw."B"
+		WHERE r."A" = ANY($1)
+		UNION
+		SELECT r."B" as post_id, w.id, w.content
+		FROM "_Post_relateds" r
+		JOIN "Post" p ON p.id = r."A"
+		JOIN "_Post_warnings" pw ON pw."A" = p.id
+		JOIN "Warning" w ON w.id = pw."B"
+		WHERE r."B" = ANY($1)
+		ORDER BY post_id, w.id
+	`
 	rows, err := r.db.QueryContext(ctx, query, pqIntArray(postIDs))
 	if err != nil {
 		return result, err
@@ -1564,7 +1588,7 @@ func (r *Repo) fetchImages(ctx context.Context, ids []int) (map[int]*Photo, erro
 			},
 		}
 		photo.Resized = r.buildResizedURLs(im.fileID, im.ext)
-		photo.ResizedWebp = r.buildResizedURLs(im.fileID, "webp")
+		photo.ResizedWebp = r.buildResizedURLs(im.fileID, "webP")
 		result[im.id] = &photo
 	}
 	return result, rows.Err()
@@ -1635,7 +1659,16 @@ func (r *Repo) fetchExternalCategories(ctx context.Context, externalIDs []int) (
 	if len(externalIDs) == 0 {
 		return result, nil
 	}
-	query := `SELECT ec."A" as external_id, c.id, c.name, c.slug, c.state FROM "_External_categories" ec JOIN "Category" c ON c.id = ec."B" WHERE ec."A" = ANY($1)`
+	// categories 是從 relateds 來的，需要 join Category 表與 relateds
+	query := `
+		SELECT DISTINCT er."A" as external_id, c.id, c.name, c.slug, c.state
+		FROM "_External_relateds" er
+		JOIN "Post" p ON p.id = er."B"
+		JOIN "_Post_categories" pc ON pc."A" = p.id
+		JOIN "Category" c ON c.id = pc."B"
+		WHERE er."A" = ANY($1)
+		ORDER BY er."A", c.id
+	`
 	rows, err := r.db.QueryContext(ctx, query, pqIntArray(externalIDs))
 	if err != nil {
 		return result, err
