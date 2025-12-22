@@ -709,8 +709,8 @@ func (r *Repo) QueryPostByUnique(ctx context.Context, where *PostWhereUniqueInpu
 		p.UpdatedAt = updatedAt.Time.UTC().Format(timeLayoutMilli)
 	}
 	p.Brief = decodeJSONBytes(briefRaw)
-	p.ApiDataBrief = decodeJSONBytes(apiDataBrief)
-	p.ApiData = decodeJSONBytes(apiData)
+	p.ApiDataBrief = decodeJSONBytesAny(apiDataBrief)
+	p.ApiData = decodeJSONBytesAny(apiData)
 	p.Content = decodeJSONBytes(contentRaw)
 	p.TrimmedContent = p.Content
 	p.Metadata = map[string]any{
