@@ -53,14 +53,20 @@ func Build(repo *data.Repo) (graphql.Schema, error) {
 		},
 	})
 
-	categoryWhereInputType := graphql.NewInputObject(graphql.InputObjectConfig{
-		Name: "CategoryWhereInput",
-		Fields: graphql.InputObjectConfigFieldMap{
-			"slug":         &graphql.InputObjectFieldConfig{Type: stringFilterInput},
-			"state":        &graphql.InputObjectFieldConfig{Type: stringFilterInput},
-			"isMemberOnly": &graphql.InputObjectFieldConfig{Type: booleanFilterInput},
-		},
+	// CategoryWhereInput: 根據 Lilith schema，不包含 isMemberOnly，但包含 AND/OR/NOT
+	var categoryWhereInputType *graphql.InputObject
+	categoryWhereInputFields := graphql.InputObjectConfigFieldMap{
+		"slug":  &graphql.InputObjectFieldConfig{Type: stringFilterInput},
+		"state": &graphql.InputObjectFieldConfig{Type: stringFilterInput},
+	}
+	categoryWhereInputType = graphql.NewInputObject(graphql.InputObjectConfig{
+		Name:   "CategoryWhereInput",
+		Fields: categoryWhereInputFields,
 	})
+	// 加入 AND/OR/NOT（循環引用）
+	categoryWhereInputFields["AND"] = &graphql.InputObjectFieldConfig{Type: graphql.NewList(graphql.NewNonNull(categoryWhereInputType))}
+	categoryWhereInputFields["OR"] = &graphql.InputObjectFieldConfig{Type: graphql.NewList(graphql.NewNonNull(categoryWhereInputType))}
+	categoryWhereInputFields["NOT"] = &graphql.InputObjectFieldConfig{Type: categoryWhereInputType}
 	categoryManyRelationFilterType := graphql.NewInputObject(graphql.InputObjectConfig{
 		Name: "CategoryManyRelationFilter",
 		Fields: graphql.InputObjectConfigFieldMap{
@@ -75,35 +81,49 @@ func Build(repo *data.Repo) (graphql.Schema, error) {
 		},
 	})
 
-	postWhereInputType := graphql.NewInputObject(graphql.InputObjectConfig{
-		Name: "PostWhereInput",
-		Fields: graphql.InputObjectConfigFieldMap{
-			"slug":       &graphql.InputObjectFieldConfig{Type: stringFilterInput},
-			"sections":   &graphql.InputObjectFieldConfig{Type: sectionManyRelationFilterType},
-			"categories": &graphql.InputObjectFieldConfig{Type: categoryManyRelationFilterType},
-			"state":      &graphql.InputObjectFieldConfig{Type: stringFilterInput},
-			"isAdult":    &graphql.InputObjectFieldConfig{Type: booleanFilterInput},
-			"isMember":   &graphql.InputObjectFieldConfig{Type: booleanFilterInput},
-		},
+	// PostWhereInput: 根據 Lilith schema，不包含 slug，但包含 AND/OR/NOT
+	// 注意：graphql-go 可能不支援 InputObjectConfigFieldMapThunk，所以先不加入 AND/OR/NOT
+	// 如果 probe 測試需要這些，我們可以後續加入
+	var postWhereInputType *graphql.InputObject
+	postWhereInputFields := graphql.InputObjectConfigFieldMap{
+		"sections":   &graphql.InputObjectFieldConfig{Type: sectionManyRelationFilterType},
+		"categories": &graphql.InputObjectFieldConfig{Type: categoryManyRelationFilterType},
+		"state":      &graphql.InputObjectFieldConfig{Type: stringFilterInput},
+		"isAdult":    &graphql.InputObjectFieldConfig{Type: booleanFilterInput},
+		"isMember":   &graphql.InputObjectFieldConfig{Type: booleanFilterInput},
+	}
+	postWhereInputType = graphql.NewInputObject(graphql.InputObjectConfig{
+		Name:   "PostWhereInput",
+		Fields: postWhereInputFields,
 	})
+	// 加入 AND/OR/NOT（循環引用）
+	postWhereInputFields["AND"] = &graphql.InputObjectFieldConfig{Type: graphql.NewList(graphql.NewNonNull(postWhereInputType))}
+	postWhereInputFields["OR"] = &graphql.InputObjectFieldConfig{Type: graphql.NewList(graphql.NewNonNull(postWhereInputType))}
+	postWhereInputFields["NOT"] = &graphql.InputObjectFieldConfig{Type: postWhereInputType}
 
 	postWhereUniqueInputType := graphql.NewInputObject(graphql.InputObjectConfig{
 		Name: "PostWhereUniqueInput",
 		Fields: graphql.InputObjectConfigFieldMap{
-			"id":   &graphql.InputObjectFieldConfig{Type: graphql.ID},
-			"slug": &graphql.InputObjectFieldConfig{Type: graphql.String},
+			"id": &graphql.InputObjectFieldConfig{Type: graphql.ID},
+			// 根據 Lilith schema，PostWhereUniqueInput 只有 id，沒有 slug
 		},
 	})
 
-	externalWhereInputType := graphql.NewInputObject(graphql.InputObjectConfig{
-		Name: "ExternalWhereInput",
-		Fields: graphql.InputObjectConfigFieldMap{
-			"slug":          &graphql.InputObjectFieldConfig{Type: stringFilterInput},
-			"state":         &graphql.InputObjectFieldConfig{Type: stringFilterInput},
-			"partner":       &graphql.InputObjectFieldConfig{Type: partnerWhereInputType},
-			"publishedDate": &graphql.InputObjectFieldConfig{Type: dateTimeNullableFilter},
-		},
+	// ExternalWhereInput: 根據 Lilith schema，不包含 slug，但包含 AND/OR/NOT
+	var externalWhereInputType *graphql.InputObject
+	externalWhereInputFields := graphql.InputObjectConfigFieldMap{
+		"state":         &graphql.InputObjectFieldConfig{Type: stringFilterInput},
+		"partner":       &graphql.InputObjectFieldConfig{Type: partnerWhereInputType},
+		"publishedDate": &graphql.InputObjectFieldConfig{Type: dateTimeNullableFilter},
+	}
+	externalWhereInputType = graphql.NewInputObject(graphql.InputObjectConfig{
+		Name:   "ExternalWhereInput",
+		Fields: externalWhereInputFields,
 	})
+	// 加入 AND/OR/NOT（循環引用）
+	externalWhereInputFields["AND"] = &graphql.InputObjectFieldConfig{Type: graphql.NewList(graphql.NewNonNull(externalWhereInputType))}
+	externalWhereInputFields["OR"] = &graphql.InputObjectFieldConfig{Type: graphql.NewList(graphql.NewNonNull(externalWhereInputType))}
+	externalWhereInputFields["NOT"] = &graphql.InputObjectFieldConfig{Type: externalWhereInputType}
 
 	orderDirectionEnum := graphql.NewEnum(graphql.EnumConfig{
 		Name: "OrderDirection",
@@ -165,11 +185,11 @@ func Build(repo *data.Repo) (graphql.Schema, error) {
 	categoryType := graphql.NewObject(graphql.ObjectConfig{
 		Name: "Category",
 		Fields: graphql.Fields{
-			"id":           &graphql.Field{Type: graphql.ID},
-			"name":         &graphql.Field{Type: graphql.String},
-			"slug":         &graphql.Field{Type: graphql.String},
-			"state":        &graphql.Field{Type: graphql.String},
-			"isMemberOnly": &graphql.Field{Type: graphql.Boolean},
+			"id":    &graphql.Field{Type: graphql.ID},
+			"name":  &graphql.Field{Type: graphql.String},
+			"slug":  &graphql.Field{Type: graphql.String},
+			"state": &graphql.Field{Type: graphql.String},
+			// 根據 Lilith schema，Category 不包含 isMemberOnly
 			"sections": &graphql.Field{
 				Type: graphql.NewList(sectionType),
 				Args: graphql.FieldConfigArgument{
@@ -235,8 +255,7 @@ func Build(repo *data.Repo) (graphql.Schema, error) {
 			"slug":        &graphql.Field{Type: graphql.String},
 			"name":        &graphql.Field{Type: graphql.String},
 			"showOnIndex": &graphql.Field{Type: graphql.Boolean},
-			"showThumb":   &graphql.Field{Type: graphql.Boolean},
-			"showBrief":   &graphql.Field{Type: graphql.Boolean},
+			// 根據 Lilith schema，Partner 不包含 showThumb 和 showBrief
 		},
 	})
 
