@@ -232,19 +232,6 @@ func Build(repo *data.Repo) (graphql.Schema, error) {
 		},
 	})
 
-	// 輔助函數：根據圖片寬度過濾 resized URLs
-	// 根據 probe 結果，w1200 總是返回空字串，w2400 根據圖片寬度決定
-	filterResizedByWidth := func(resized data.Resized, width int, isWebp bool) data.Resized {
-		result := resized
-		// w1200 總是返回空字串
-		result.W1200 = ""
-		// w2400 如果圖片寬度小於 2400，返回空字串
-		if width < 2400 {
-			result.W2400 = ""
-		}
-		return result
-	}
-
 	resizedType := graphql.NewObject(graphql.ObjectConfig{
 		Name: "Resized",
 		Fields: graphql.Fields{
@@ -337,8 +324,9 @@ func Build(repo *data.Repo) (graphql.Schema, error) {
 					if photo == nil {
 						return data.Resized{}, nil
 					}
-					// 根據圖片寬度過濾 resized URLs
-					return filterResizedByWidth(photo.Resized, photo.ImageFile.Width, false), nil
+					// resized 是 virtual field，直接返回 Photo 中的 Resized 物件
+					// 所有尺寸的 URL 已經在 repo.go 的 buildResizedURLs 中生成
+					return photo.Resized, nil
 				},
 			},
 			"resizedWebp": &graphql.Field{
@@ -355,8 +343,9 @@ func Build(repo *data.Repo) (graphql.Schema, error) {
 					if photo == nil {
 						return data.Resized{}, nil
 					}
-					// 根據圖片寬度過濾 resizedWebp URLs
-					return filterResizedByWidth(photo.ResizedWebp, photo.ImageFile.Width, true), nil
+					// resizedWebp 是 virtual field，直接返回 Photo 中的 ResizedWebp 物件
+					// 所有尺寸的 URL 已經在 repo.go 的 buildResizedURLs 中生成
+					return photo.ResizedWebp, nil
 				},
 			},
 		},
