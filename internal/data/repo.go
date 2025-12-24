@@ -2446,9 +2446,11 @@ func (r *Repo) fetchTopicTags(ctx context.Context, topicIDs []int) (map[int][]Ta
 	for rows.Next() {
 		var topicID int
 		var tag Tag
-		if err := rows.Scan(&topicID, &tag.ID, &tag.Name, &tag.Slug); err != nil {
+		var tagID int
+		if err := rows.Scan(&topicID, &tagID, &tag.Name, &tag.Slug); err != nil {
 			return result, err
 		}
+		tag.ID = strconv.Itoa(tagID)
 		result[topicID] = append(result[topicID], tag)
 	}
 	return result, rows.Err()
@@ -2573,11 +2575,11 @@ func (r *Repo) QueryVideos(ctx context.Context, where *VideoWhereInput, orders [
 			argIdx++
 		}
 		if where.Tags != nil && where.Tags.Some != nil && where.Tags.Some.ID != nil && where.Tags.Some.ID.Equals != nil {
-			// 透過 _Video_tags 表查詢
-			sb.WriteString(` JOIN "_Video_tags" vt ON vt."A" = v.id`)
+			// 透過 _Video_tags 表查詢（Tag 是 A，Video 是 B）
+			sb.WriteString(` JOIN "_Video_tags" vt ON vt."B" = v.id`)
 			tagID, err := strconv.Atoi(*where.Tags.Some.ID.Equals)
 			if err == nil {
-				conds = append(conds, fmt.Sprintf(`vt."B" = $%d`, argIdx))
+				conds = append(conds, fmt.Sprintf(`vt."A" = $%d`, argIdx))
 				args = append(args, tagID)
 				argIdx++
 			}
@@ -2606,9 +2608,11 @@ func (r *Repo) QueryVideos(ctx context.Context, where *VideoWhereInput, orders [
 		}
 		if len(orderParts) > 0 {
 			sb.WriteString(strings.Join(orderParts, ", "))
+			// 添加 id DESC 作為次級排序，確保排序穩定
+			sb.WriteString(`, v.id DESC`)
 		}
 	} else {
-		sb.WriteString(` ORDER BY v."publishedDate" DESC`)
+		sb.WriteString(` ORDER BY v."publishedDate" DESC, v.id DESC`)
 	}
 
 	if take > 0 {
@@ -2865,17 +2869,17 @@ func (r *Repo) fetchVideoTags(ctx context.Context, videoIDs []int) (map[int][]Ta
 	if len(videoIDs) == 0 {
 		return result, nil
 	}
-	// 根據 Video.ts，Video.tags 是透過 _Video_tags 表關聯（Video 是 A，Tag 是 B）
+	// 根據 Video.ts，Video.tags 是透過 _Video_tags 表關聯（Tag 是 A，Video 是 B）
 	query := `
-		SELECT vt."A" as video_id, t.id, t.name, t.slug
+		SELECT vt."B" as video_id, t.id, t.name, t.slug
 		FROM "_Video_tags" vt
-		JOIN "Tag" t ON t.id = vt."B"
-		WHERE vt."A" = ANY($1)
-		ORDER BY vt."A", t.id
+		JOIN "Tag" t ON t.id = vt."A"
+		WHERE vt."B" = ANY($1)
+		ORDER BY vt."B", t.id
 	`
 	rows, err := r.db.QueryContext(ctx, query, pqIntArray(videoIDs))
 	if err != nil {
-		return result, nil
+		return result, err
 	}
 	defer rows.Close()
 	for rows.Next() {
