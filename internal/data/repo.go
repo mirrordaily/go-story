@@ -2608,11 +2608,10 @@ func (r *Repo) QueryVideos(ctx context.Context, where *VideoWhereInput, orders [
 		}
 		if len(orderParts) > 0 {
 			sb.WriteString(strings.Join(orderParts, ", "))
-			// 添加 id ASC 作為次級排序，確保排序穩定（與 target 一致）
-			sb.WriteString(`, v.id ASC`)
+			// 不添加次級排序，讓資料庫使用自然順序（與 target 一致）
 		}
 	} else {
-		sb.WriteString(` ORDER BY v."publishedDate" DESC, v.id ASC`)
+		sb.WriteString(` ORDER BY v."publishedDate" DESC`)
 	}
 
 	if take > 0 {
