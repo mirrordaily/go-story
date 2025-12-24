@@ -1941,7 +1941,7 @@ func (r *Repo) QueryTopics(ctx context.Context, where *TopicWhereInput, orders [
 	where = ensureTopicPublished(where)
 
 	sb := strings.Builder{}
-	sb.WriteString(`SELECT id, name, slug, "sortOrder", state, "publishedDate", brief, "apiDataBrief", COALESCE("leading", '') as leading, "heroImage", "heroUrl", "heroVideo", COALESCE(og_title, '') as og_title, COALESCE(og_description, '') as og_description, "og_image", COALESCE(type, 'list') as type, COALESCE(style, '') as style, "isFeatured", COALESCE("title_style", 'feature') as title_style, COALESCE(javascript, '') as javascript, COALESCE(dfp, '') as dfp, COALESCE("mobile_dfp", '') as mobile_dfp, "createdAt" FROM "Topic" t`)
+	sb.WriteString(`SELECT id, name, slug, "sortOrder", state, "publishedDate", brief, "apiDataBrief", "leading", "heroImage", "heroUrl", "heroVideo", COALESCE(og_title, '') as og_title, COALESCE(og_description, '') as og_description, "og_image", COALESCE(type, 'list') as type, COALESCE(style, '') as style, "isFeatured", COALESCE("title_style", 'feature') as title_style, COALESCE(javascript, '') as javascript, COALESCE(dfp, '') as dfp, COALESCE("mobile_dfp", '') as mobile_dfp, "createdAt" FROM "Topic" t`)
 
 	conds := []string{}
 	args := []interface{}{}
@@ -2019,8 +2019,14 @@ func (r *Repo) QueryTopics(ctx context.Context, where *TopicWhereInput, orders [
 		var brief, apiDataBrief sql.NullString
 		var heroImageID, heroVideoID, ogImageID sql.NullInt64
 		var heroUrl sql.NullString
-		if err := rows.Scan(&dbID, &t.Name, &t.Slug, &sortOrder, &t.State, &pubAt, &brief, &apiDataBrief, &t.Leading, &heroImageID, &heroUrl, &heroVideoID, &t.OgTitle, &t.OgDescription, &ogImageID, &t.Type, &t.Style, &t.IsFeatured, &t.TitleStyle, &t.Javascript, &t.Dfp, &t.MobileDfp, &createdAt); err != nil {
+		var leading sql.NullString
+		if err := rows.Scan(&dbID, &t.Name, &t.Slug, &sortOrder, &t.State, &pubAt, &brief, &apiDataBrief, &leading, &heroImageID, &heroUrl, &heroVideoID, &t.OgTitle, &t.OgDescription, &ogImageID, &t.Type, &t.Style, &t.IsFeatured, &t.TitleStyle, &t.Javascript, &t.Dfp, &t.MobileDfp, &createdAt); err != nil {
 			return nil, err
+		}
+		if leading.Valid {
+			t.Leading = leading.String
+		} else {
+			t.Leading = ""
 		}
 		if heroUrl.Valid {
 			t.HeroUrl = heroUrl.String
@@ -2133,7 +2139,7 @@ func (r *Repo) QueryTopicBySlug(ctx context.Context, slug string) (*Topic, error
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	query := `SELECT id, name, slug, "sortOrder", state, "publishedDate", brief, "apiDataBrief", COALESCE("leading", '') as leading, "heroImage", "heroUrl", "heroVideo", COALESCE(og_title, '') as og_title, COALESCE(og_description, '') as og_description, "og_image", COALESCE(type, 'list') as type, COALESCE(style, '') as style, "isFeatured", COALESCE("title_style", 'feature') as title_style, COALESCE(javascript, '') as javascript, COALESCE(dfp, '') as dfp, COALESCE("mobile_dfp", '') as mobile_dfp, "createdAt" FROM "Topic" WHERE slug = $1 AND state = 'published'`
+	query := `SELECT id, name, slug, "sortOrder", state, "publishedDate", brief, "apiDataBrief", "leading", "heroImage", "heroUrl", "heroVideo", COALESCE(og_title, '') as og_title, COALESCE(og_description, '') as og_description, "og_image", COALESCE(type, 'list') as type, COALESCE(style, '') as style, "isFeatured", COALESCE("title_style", 'feature') as title_style, COALESCE(javascript, '') as javascript, COALESCE(dfp, '') as dfp, COALESCE("mobile_dfp", '') as mobile_dfp, "createdAt" FROM "Topic" WHERE slug = $1 AND state = 'published'`
 
 	var t Topic
 	var dbID int
@@ -2142,7 +2148,13 @@ func (r *Repo) QueryTopicBySlug(ctx context.Context, slug string) (*Topic, error
 	var brief, apiDataBrief sql.NullString
 	var heroImageID, heroVideoID, ogImageID sql.NullInt64
 	var heroUrl sql.NullString
-	err := r.db.QueryRowContext(ctx, query, slug).Scan(&dbID, &t.Name, &t.Slug, &sortOrder, &t.State, &pubAt, &brief, &apiDataBrief, &t.Leading, &heroImageID, &heroUrl, &heroVideoID, &t.OgTitle, &t.OgDescription, &ogImageID, &t.Type, &t.Style, &t.IsFeatured, &t.TitleStyle, &t.Javascript, &t.Dfp, &t.MobileDfp, &createdAt)
+	var leading sql.NullString
+	err := r.db.QueryRowContext(ctx, query, slug).Scan(&dbID, &t.Name, &t.Slug, &sortOrder, &t.State, &pubAt, &brief, &apiDataBrief, &leading, &heroImageID, &heroUrl, &heroVideoID, &t.OgTitle, &t.OgDescription, &ogImageID, &t.Type, &t.Style, &t.IsFeatured, &t.TitleStyle, &t.Javascript, &t.Dfp, &t.MobileDfp, &createdAt)
+	if leading.Valid {
+		t.Leading = leading.String
+	} else {
+		t.Leading = ""
+	}
 	if heroUrl.Valid {
 		t.HeroUrl = heroUrl.String
 	} else {
@@ -2208,7 +2220,7 @@ func (r *Repo) QueryTopicByID(ctx context.Context, id string) (*Topic, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	query := `SELECT id, name, slug, "sortOrder", state, "publishedDate", brief, "apiDataBrief", COALESCE("leading", '') as leading, "heroImage", "heroUrl", "heroVideo", COALESCE(og_title, '') as og_title, COALESCE(og_description, '') as og_description, "og_image", COALESCE(type, 'list') as type, COALESCE(style, '') as style, "isFeatured", COALESCE("title_style", 'feature') as title_style, COALESCE(javascript, '') as javascript, COALESCE(dfp, '') as dfp, COALESCE("mobile_dfp", '') as mobile_dfp, "createdAt" FROM "Topic" WHERE id = $1 AND state = 'published'`
+	query := `SELECT id, name, slug, "sortOrder", state, "publishedDate", brief, "apiDataBrief", "leading", "heroImage", "heroUrl", "heroVideo", COALESCE(og_title, '') as og_title, COALESCE(og_description, '') as og_description, "og_image", COALESCE(type, 'list') as type, COALESCE(style, '') as style, "isFeatured", COALESCE("title_style", 'feature') as title_style, COALESCE(javascript, '') as javascript, COALESCE(dfp, '') as dfp, COALESCE("mobile_dfp", '') as mobile_dfp, "createdAt" FROM "Topic" WHERE id = $1 AND state = 'published'`
 
 	var t Topic
 	var dbID int
@@ -2217,7 +2229,13 @@ func (r *Repo) QueryTopicByID(ctx context.Context, id string) (*Topic, error) {
 	var brief, apiDataBrief sql.NullString
 	var heroImageID, heroVideoID, ogImageID sql.NullInt64
 	var heroUrl sql.NullString
-	err = r.db.QueryRowContext(ctx, query, idInt).Scan(&dbID, &t.Name, &t.Slug, &sortOrder, &t.State, &pubAt, &brief, &apiDataBrief, &t.Leading, &heroImageID, &heroUrl, &heroVideoID, &t.OgTitle, &t.OgDescription, &ogImageID, &t.Type, &t.Style, &t.IsFeatured, &t.TitleStyle, &t.Javascript, &t.Dfp, &t.MobileDfp, &createdAt)
+	var leading sql.NullString
+	err = r.db.QueryRowContext(ctx, query, idInt).Scan(&dbID, &t.Name, &t.Slug, &sortOrder, &t.State, &pubAt, &brief, &apiDataBrief, &leading, &heroImageID, &heroUrl, &heroVideoID, &t.OgTitle, &t.OgDescription, &ogImageID, &t.Type, &t.Style, &t.IsFeatured, &t.TitleStyle, &t.Javascript, &t.Dfp, &t.MobileDfp, &createdAt)
+	if leading.Valid {
+		t.Leading = leading.String
+	} else {
+		t.Leading = ""
+	}
 	if heroUrl.Valid {
 		t.HeroUrl = heroUrl.String
 	} else {

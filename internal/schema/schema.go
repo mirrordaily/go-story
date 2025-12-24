@@ -238,16 +238,9 @@ func Build(repo *data.Repo) (graphql.Schema, error) {
 			"original": &graphql.Field{Type: graphql.String},
 			"w480":     &graphql.Field{Type: graphql.String},
 			"w800":     &graphql.Field{Type: graphql.String},
-			"w1200": &graphql.Field{
-				Type: graphql.String,
-				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
-					// w1200 是 virtual field，根據 probe 結果，target 返回空字串
-					// 為了匹配 target 的行為，我們也返回空字串
-					return "", nil
-				},
-			},
-			"w1600": &graphql.Field{Type: graphql.String},
-			"w2400": &graphql.Field{Type: graphql.String},
+			"w1200":    &graphql.Field{Type: graphql.String},
+			"w1600":    &graphql.Field{Type: graphql.String},
+			"w2400":    &graphql.Field{Type: graphql.String},
 		},
 	})
 
@@ -392,8 +385,18 @@ func Build(repo *data.Repo) (graphql.Schema, error) {
 				"publishedDate": &graphql.Field{Type: dateTimeScalar},
 				"brief":         &graphql.Field{Type: jsonScalar},
 				"apiDataBrief":  &graphql.Field{Type: jsonScalar},
-				"leading":       &graphql.Field{Type: graphql.String},
-				"heroImage":     &graphql.Field{Type: photoType},
+				"leading": &graphql.Field{
+					Type: graphql.String,
+					Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+						topic := normalizeTopic(p.Source)
+						// 當 leading 為空字串時，返回 nil 以匹配 target 的行為
+						if topic.Leading == "" {
+							return nil, nil
+						}
+						return topic.Leading, nil
+					},
+				},
+				"heroImage": &graphql.Field{Type: photoType},
 				"heroUrl": &graphql.Field{
 					Type: graphql.String,
 					Resolve: func(p graphql.ResolveParams) (interface{}, error) {
