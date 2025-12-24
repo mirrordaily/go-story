@@ -2174,17 +2174,21 @@ func (r *Repo) QueryTopicBySlug(ctx context.Context, slug string) (*Topic, error
 		t.ApiDataBrief = decodeJSONBytesAny([]byte(apiDataBrief.String))
 	}
 
+	t.Metadata = map[string]any{}
 	heroImageIDs := []int{}
 	heroVideoIDs := []int{}
 	ogImageIDs := []int{}
 	if heroImageID.Valid {
 		heroImageIDs = append(heroImageIDs, int(heroImageID.Int64))
+		t.Metadata["heroImageID"] = int(heroImageID.Int64)
 	}
 	if heroVideoID.Valid {
 		heroVideoIDs = append(heroVideoIDs, int(heroVideoID.Int64))
+		t.Metadata["heroVideoID"] = int(heroVideoID.Int64)
 	}
 	if ogImageID.Valid {
 		ogImageIDs = append(ogImageIDs, int(ogImageID.Int64))
+		t.Metadata["ogImageID"] = int(ogImageID.Int64)
 	}
 
 	topics := []Topic{t}
@@ -2277,7 +2281,7 @@ func (r *Repo) enrichTopics(ctx context.Context, topics *[]Topic, topicIDs []int
 	}
 
 	// Fetch images
-	allImageIDs := append(append(heroImageIDs, ogImageIDs...), []int{}...)
+	allImageIDs := append(heroImageIDs, ogImageIDs...)
 	imagesMap, err := r.fetchImages(ctx, allImageIDs)
 	if err != nil {
 		return err
@@ -2519,7 +2523,7 @@ func (r *Repo) QueryVideos(ctx context.Context, where *VideoWhereInput, orders [
 	where = ensureVideoPublished(where)
 
 	sb := strings.Builder{}
-	sb.WriteString(`SELECT id, COALESCE(name, '') as name, "isShorts", COALESCE("youtubeUrl", '') as youtubeUrl, COALESCE("fileDuration", '') as fileDuration, COALESCE("youtubeDuration", '') as youtubeDuration, COALESCE(content, '') as content, "heroImage", COALESCE(uploader, '') as uploader, COALESCE("uploaderEmail", '') as uploaderEmail, "isFeed", COALESCE("videoSection", 'news') as videoSection, state, "publishedDate", COALESCE("publishedDateString", '') as publishedDateString, "updateTimeStamp", "createdAt" FROM "Video" v`)
+	sb.WriteString(`SELECT id, COALESCE(name, '') as name, "isShorts", COALESCE("youtubeUrl", '') as youtubeUrl, COALESCE("fileDuration", '') as fileDuration, COALESCE("youtubeDuration", '') as youtubeDuration, COALESCE(content, '') as content, "heroImage", COALESCE(uploader, '') as uploader, COALESCE("uploaderEmail", '') as uploaderEmail, "isFeed", COALESCE("videoSection", 'news') as videoSection, state, "publishedDate", COALESCE("publishedDateString", '') as publishedDateString, "updateTimeStamp", "createdAt", "file_filename" FROM "Video" v`)
 
 	conds := []string{}
 	args := []interface{}{}
@@ -2727,6 +2731,9 @@ func (r *Repo) QueryVideoByUnique(ctx context.Context, where *VideoWhereUniqueIn
 
 // QueryVideoByID 根據 ID 查詢單一 video
 func (r *Repo) QueryVideoByID(ctx context.Context, id string) (*Video, error) {
+	if id == "" {
+		return nil, nil
+	}
 	idInt, err := strconv.Atoi(id)
 	if err != nil {
 		return nil, err
