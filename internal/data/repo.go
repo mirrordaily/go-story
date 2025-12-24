@@ -72,9 +72,27 @@ type Warning struct {
 }
 
 type Video struct {
-	ID        string `json:"id"`
-	VideoSrc  string `json:"videoSrc"`
-	HeroImage *Photo `json:"heroImage"`
+	ID                  string         `json:"id"`
+	Name                string         `json:"name"`
+	IsShorts            bool           `json:"isShorts"`
+	YoutubeUrl          string         `json:"youtubeUrl"`
+	FileDuration        string         `json:"fileDuration"`
+	YoutubeDuration     string         `json:"youtubeDuration"`
+	VideoSrc            string         `json:"videoSrc"`
+	Content             string         `json:"content"`
+	HeroImage           *Photo         `json:"heroImage"`
+	Uploader            string         `json:"uploader"`
+	UploaderEmail       string         `json:"uploaderEmail"`
+	IsFeed              bool           `json:"isFeed"`
+	VideoSection        string         `json:"videoSection"`
+	State               string         `json:"state"`
+	PublishedDate       string         `json:"publishedDate"`
+	PublishedDateString string         `json:"publishedDateString"`
+	UpdateTimeStamp     bool           `json:"updateTimeStamp"`
+	Tags                []Tag          `json:"tags"`
+	RelatedPosts        []Post         `json:"related_posts"`
+	CreatedAt           string         `json:"createdAt"`
+	Metadata            map[string]any `json:"-"`
 }
 
 type Partner struct {
@@ -87,7 +105,35 @@ type Partner struct {
 }
 
 type Topic struct {
-	Slug string `json:"slug"`
+	ID                           string         `json:"id"`
+	Name                         string         `json:"name"`
+	Slug                         string         `json:"slug"`
+	SortOrder                    *int           `json:"sortOrder"`
+	State                        string         `json:"state"`
+	PublishedDate                string         `json:"publishedDate"`
+	Brief                        map[string]any `json:"brief"`
+	ApiDataBrief                 interface{}    `json:"apiDataBrief"`
+	Leading                      string         `json:"leading"`
+	HeroImage                    *Photo         `json:"heroImage"`
+	HeroUrl                      string         `json:"heroUrl"`
+	HeroVideo                    *Video         `json:"heroVideo"`
+	SlideshowImages              []Photo        `json:"slideshow_images"`
+	ManualOrderOfSlideshowImages map[string]any `json:"manualOrderOfSlideshowImages"`
+	OgTitle                      string         `json:"og_title"`
+	OgDescription                string         `json:"og_description"`
+	OgImage                      *Photo         `json:"og_image"`
+	Type                         string         `json:"type"`
+	Tags                         []Tag          `json:"tags"`
+	Posts                        []Post         `json:"posts"`
+	Style                        string         `json:"style"`
+	IsFeatured                   bool           `json:"isFeatured"`
+	TitleStyle                   string         `json:"title_style"`
+	Sections                     []Section      `json:"sections"`
+	Javascript                   string         `json:"javascript"`
+	Dfp                          string         `json:"dfp"`
+	MobileDfp                    string         `json:"mobile_dfp"`
+	CreatedAt                    string         `json:"createdAt"`
+	Metadata                     map[string]any `json:"-"`
 }
 
 type Post struct {
@@ -221,6 +267,40 @@ type ExternalWhereInput struct {
 	PublishedDate *DateTimeNullableFilter `mapstructure:"publishedDate"`
 }
 
+type TopicWhereInput struct {
+	State *StringFilter `mapstructure:"state"`
+}
+
+type TopicWhereUniqueInput struct {
+	ID   *string `mapstructure:"id"`
+	Slug *string `mapstructure:"slug"`
+	Name *string `mapstructure:"name"`
+}
+
+type VideoWhereInput struct {
+	State        *StringFilter          `mapstructure:"state"`
+	IsShorts     *BooleanFilter         `mapstructure:"isShorts"`
+	VideoSection *StringFilter          `mapstructure:"videoSection"`
+	YoutubeUrl   *StringFilter          `mapstructure:"youtubeUrl"`
+	Tags         *TagManyRelationFilter `mapstructure:"tags"`
+}
+
+type TagManyRelationFilter struct {
+	Some *TagWhereInput `mapstructure:"some"`
+}
+
+type TagWhereInput struct {
+	ID *IDFilter `mapstructure:"id"`
+}
+
+type IDFilter struct {
+	Equals *string `mapstructure:"equals"`
+}
+
+type VideoWhereUniqueInput struct {
+	ID *string `mapstructure:"id"`
+}
+
 type OrderRule struct {
 	Field     string
 	Direction string
@@ -310,6 +390,50 @@ func DecodeExternalWhere(input interface{}) (*ExternalWhereInput, error) {
 	var where ExternalWhereInput
 	if err := decodeInto(input, &where); err != nil {
 		return nil, fmt.Errorf("external where: %w", err)
+	}
+	return &where, nil
+}
+
+func DecodeTopicWhere(input interface{}) (*TopicWhereInput, error) {
+	if input == nil {
+		return nil, nil
+	}
+	var where TopicWhereInput
+	if err := decodeInto(input, &where); err != nil {
+		return nil, fmt.Errorf("topic where: %w", err)
+	}
+	return &where, nil
+}
+
+func DecodeTopicWhereUnique(input interface{}) (*TopicWhereUniqueInput, error) {
+	if input == nil {
+		return nil, nil
+	}
+	var where TopicWhereUniqueInput
+	if err := decodeInto(input, &where); err != nil {
+		return nil, fmt.Errorf("topic where unique: %w", err)
+	}
+	return &where, nil
+}
+
+func DecodeVideoWhere(input interface{}) (*VideoWhereInput, error) {
+	if input == nil {
+		return nil, nil
+	}
+	var where VideoWhereInput
+	if err := decodeInto(input, &where); err != nil {
+		return nil, fmt.Errorf("video where: %w", err)
+	}
+	return &where, nil
+}
+
+func DecodeVideoWhereUnique(input interface{}) (*VideoWhereUniqueInput, error) {
+	if input == nil {
+		return nil, nil
+	}
+	var where VideoWhereUniqueInput
+	if err := decodeInto(input, &where); err != nil {
+		return nil, fmt.Errorf("video where unique: %w", err)
 	}
 	return &where, nil
 }
@@ -1771,4 +1895,944 @@ func (r *Repo) buildResizedURLs(fileID, ext string) Resized {
 		W1600:    makeURL("w1600", ext),
 		W2400:    makeURL("w2400", ext),
 	}
+}
+
+// ensureTopicPublished 確保查詢只返回 published 的 topics
+func ensureTopicPublished(where *TopicWhereInput) *TopicWhereInput {
+	if where == nil {
+		where = &TopicWhereInput{}
+	}
+	if where.State == nil {
+		where.State = &StringFilter{Equals: stringPtr("published")}
+	} else if where.State.Equals == nil {
+		where.State.Equals = stringPtr("published")
+	}
+	return where
+}
+
+// ensureVideoPublished 確保查詢只返回 published 的 videos
+func ensureVideoPublished(where *VideoWhereInput) *VideoWhereInput {
+	if where == nil {
+		where = &VideoWhereInput{}
+	}
+	if where.State == nil {
+		where.State = &StringFilter{Equals: stringPtr("published")}
+	} else if where.State.Equals == nil {
+		where.State.Equals = stringPtr("published")
+	}
+	return where
+}
+
+func stringPtr(s string) *string {
+	return &s
+}
+
+// QueryTopics 查詢 topics
+func (r *Repo) QueryTopics(ctx context.Context, where *TopicWhereInput, orders []OrderRule, take, skip int) ([]Topic, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	where = ensureTopicPublished(where)
+
+	sb := strings.Builder{}
+	sb.WriteString(`SELECT id, name, slug, "sortOrder", state, "publishedDate", brief, "apiDataBrief", COALESCE(leading, '') as leading, "heroImage", COALESCE("heroUrl", '') as heroUrl, "heroVideo", COALESCE(og_title, '') as og_title, COALESCE(og_description, '') as og_description, "og_image", COALESCE(type, 'list') as type, COALESCE(style, '') as style, "isFeatured", COALESCE("title_style", 'feature') as title_style, COALESCE(javascript, '') as javascript, COALESCE(dfp, '') as dfp, COALESCE("mobile_dfp", '') as mobile_dfp, "createdAt" FROM "Topic" t`)
+
+	conds := []string{}
+	args := []interface{}{}
+	argIdx := 1
+
+	buildStringFilter := func(field string, f *StringFilter) {
+		if f == nil {
+			return
+		}
+		if f.Equals != nil {
+			conds = append(conds, fmt.Sprintf(`%s = $%d`, field, argIdx))
+			args = append(args, *f.Equals)
+			argIdx++
+		}
+	}
+
+	if where != nil {
+		buildStringFilter("t.state", where.State)
+	}
+
+	if len(conds) > 0 {
+		sb.WriteString(" WHERE ")
+		sb.WriteString(strings.Join(conds, " AND "))
+	}
+
+	if len(orders) > 0 {
+		sb.WriteString(" ORDER BY ")
+		orderParts := []string{}
+		for _, o := range orders {
+			dir := "ASC"
+			if o.Direction == "desc" {
+				dir = "DESC"
+			}
+			switch o.Field {
+			case "sortOrder":
+				orderParts = append(orderParts, fmt.Sprintf(`t."sortOrder" %s NULLS LAST`, dir))
+			case "id":
+				orderParts = append(orderParts, fmt.Sprintf(`t.id %s`, dir))
+			case "createdAt":
+				orderParts = append(orderParts, fmt.Sprintf(`t."createdAt" %s`, dir))
+			case "publishedDate":
+				orderParts = append(orderParts, fmt.Sprintf(`t."publishedDate" %s`, dir))
+			}
+		}
+		if len(orderParts) > 0 {
+			sb.WriteString(strings.Join(orderParts, ", "))
+		}
+	} else {
+		sb.WriteString(` ORDER BY t."sortOrder" ASC NULLS LAST, t.id DESC`)
+	}
+
+	if take > 0 {
+		sb.WriteString(fmt.Sprintf(" LIMIT %d", take))
+	}
+	if skip > 0 {
+		sb.WriteString(fmt.Sprintf(" OFFSET %d", skip))
+	}
+
+	rows, err := r.db.QueryContext(ctx, sb.String(), args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := []Topic{}
+	topicIDs := []int{}
+	heroImageIDs := []int{}
+	heroVideoIDs := []int{}
+	ogImageIDs := []int{}
+	for rows.Next() {
+		var t Topic
+		var dbID int
+		var sortOrder sql.NullInt64
+		var pubAt, createdAt sql.NullTime
+		var brief, apiDataBrief sql.NullString
+		var heroImageID, heroVideoID, ogImageID sql.NullInt64
+		if err := rows.Scan(&dbID, &t.Name, &t.Slug, &sortOrder, &t.State, &pubAt, &brief, &apiDataBrief, &t.Leading, &heroImageID, &t.HeroUrl, &heroVideoID, &t.OgTitle, &t.OgDescription, &ogImageID, &t.Type, &t.Style, &t.IsFeatured, &t.TitleStyle, &t.Javascript, &t.Dfp, &t.MobileDfp, &createdAt); err != nil {
+			return nil, err
+		}
+		t.ID = strconv.Itoa(dbID)
+		if sortOrder.Valid {
+			val := int(sortOrder.Int64)
+			t.SortOrder = &val
+		}
+		if pubAt.Valid {
+			t.PublishedDate = pubAt.Time.Format(timeLayoutMilli)
+		}
+		if createdAt.Valid {
+			t.CreatedAt = createdAt.Time.Format(timeLayoutMilli)
+		}
+		if brief.Valid && brief.String != "" {
+			if err := json.Unmarshal([]byte(brief.String), &t.Brief); err != nil {
+				t.Brief = map[string]any{}
+			}
+		}
+		if apiDataBrief.Valid && apiDataBrief.String != "" {
+			t.ApiDataBrief = decodeJSONBytesAny([]byte(apiDataBrief.String))
+		}
+		t.Metadata = map[string]any{}
+		if heroImageID.Valid {
+			heroImageIDs = append(heroImageIDs, int(heroImageID.Int64))
+			t.Metadata["heroImageID"] = int(heroImageID.Int64)
+		}
+		if heroVideoID.Valid {
+			heroVideoIDs = append(heroVideoIDs, int(heroVideoID.Int64))
+			t.Metadata["heroVideoID"] = int(heroVideoID.Int64)
+		}
+		if ogImageID.Valid {
+			ogImageIDs = append(ogImageIDs, int(ogImageID.Int64))
+			t.Metadata["ogImageID"] = int(ogImageID.Int64)
+		}
+		result = append(result, t)
+		topicIDs = append(topicIDs, dbID)
+	}
+
+	// Enrich topics
+	if err := r.enrichTopics(ctx, &result, topicIDs, heroImageIDs, heroVideoIDs, ogImageIDs); err != nil {
+		return nil, err
+	}
+
+	return result, rows.Err()
+}
+
+// QueryTopicsCount 查詢 topics 數量
+func (r *Repo) QueryTopicsCount(ctx context.Context, where *TopicWhereInput) (int, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	where = ensureTopicPublished(where)
+
+	sb := strings.Builder{}
+	sb.WriteString(`SELECT COUNT(*) FROM "Topic" t`)
+
+	conds := []string{}
+	args := []interface{}{}
+	argIdx := 1
+
+	buildStringFilter := func(field string, f *StringFilter) {
+		if f == nil {
+			return
+		}
+		if f.Equals != nil {
+			conds = append(conds, fmt.Sprintf(`%s = $%d`, field, argIdx))
+			args = append(args, *f.Equals)
+			argIdx++
+		}
+	}
+
+	if where != nil {
+		buildStringFilter("t.state", where.State)
+	}
+
+	if len(conds) > 0 {
+		sb.WriteString(" WHERE ")
+		sb.WriteString(strings.Join(conds, " AND "))
+	}
+
+	var count int
+	err := r.db.QueryRowContext(ctx, sb.String(), args...).Scan(&count)
+	return count, err
+}
+
+// QueryTopicByUnique 根據 unique input 查詢單一 topic
+func (r *Repo) QueryTopicByUnique(ctx context.Context, where *TopicWhereUniqueInput) (*Topic, error) {
+	if where == nil {
+		return nil, nil
+	}
+	if where.Slug != nil {
+		return r.QueryTopicBySlug(ctx, *where.Slug)
+	}
+	if where.ID != nil {
+		return r.QueryTopicByID(ctx, *where.ID)
+	}
+	if where.Name != nil {
+		// 根據 name 查詢（如果需要的話）
+		return nil, fmt.Errorf("query by name not implemented")
+	}
+	return nil, nil
+}
+
+// QueryTopicBySlug 根據 slug 查詢單一 topic
+func (r *Repo) QueryTopicBySlug(ctx context.Context, slug string) (*Topic, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	query := `SELECT id, name, slug, "sortOrder", state, "publishedDate", brief, "apiDataBrief", COALESCE(leading, '') as leading, "heroImage", COALESCE("heroUrl", '') as heroUrl, "heroVideo", COALESCE(og_title, '') as og_title, COALESCE(og_description, '') as og_description, "og_image", COALESCE(type, 'list') as type, COALESCE(style, '') as style, "isFeatured", COALESCE("title_style", 'feature') as title_style, COALESCE(javascript, '') as javascript, COALESCE(dfp, '') as dfp, COALESCE("mobile_dfp", '') as mobile_dfp, "createdAt" FROM "Topic" WHERE slug = $1 AND state = 'published'`
+
+	var t Topic
+	var dbID int
+	var sortOrder sql.NullInt64
+	var pubAt, createdAt sql.NullTime
+	var brief, apiDataBrief sql.NullString
+	var heroImageID, heroVideoID, ogImageID sql.NullInt64
+	err := r.db.QueryRowContext(ctx, query, slug).Scan(&dbID, &t.Name, &t.Slug, &sortOrder, &t.State, &pubAt, &brief, &apiDataBrief, &t.Leading, &heroImageID, &t.HeroUrl, &heroVideoID, &t.OgTitle, &t.OgDescription, &ogImageID, &t.Type, &t.Style, &t.IsFeatured, &t.TitleStyle, &t.Javascript, &t.Dfp, &t.MobileDfp, &createdAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	t.ID = strconv.Itoa(dbID)
+	if sortOrder.Valid {
+		val := int(sortOrder.Int64)
+		t.SortOrder = &val
+	}
+	if pubAt.Valid {
+		t.PublishedDate = pubAt.Time.Format(timeLayoutMilli)
+	}
+	if createdAt.Valid {
+		t.CreatedAt = createdAt.Time.Format(timeLayoutMilli)
+	}
+	if brief.Valid && brief.String != "" {
+		if err := json.Unmarshal([]byte(brief.String), &t.Brief); err != nil {
+			t.Brief = map[string]any{}
+		}
+	}
+	if apiDataBrief.Valid && apiDataBrief.String != "" {
+		t.ApiDataBrief = decodeJSONBytesAny([]byte(apiDataBrief.String))
+	}
+
+	heroImageIDs := []int{}
+	heroVideoIDs := []int{}
+	ogImageIDs := []int{}
+	if heroImageID.Valid {
+		heroImageIDs = append(heroImageIDs, int(heroImageID.Int64))
+	}
+	if heroVideoID.Valid {
+		heroVideoIDs = append(heroVideoIDs, int(heroVideoID.Int64))
+	}
+	if ogImageID.Valid {
+		ogImageIDs = append(ogImageIDs, int(ogImageID.Int64))
+	}
+
+	topics := []Topic{t}
+	if err := r.enrichTopics(ctx, &topics, []int{dbID}, heroImageIDs, heroVideoIDs, ogImageIDs); err != nil {
+		return nil, err
+	}
+
+	return &topics[0], nil
+}
+
+// QueryTopicByID 根據 ID 查詢單一 topic
+func (r *Repo) QueryTopicByID(ctx context.Context, id string) (*Topic, error) {
+	idInt, err := strconv.Atoi(id)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	query := `SELECT id, name, slug, "sortOrder", state, "publishedDate", brief, "apiDataBrief", COALESCE(leading, '') as leading, "heroImage", COALESCE("heroUrl", '') as heroUrl, "heroVideo", COALESCE(og_title, '') as og_title, COALESCE(og_description, '') as og_description, "og_image", COALESCE(type, 'list') as type, COALESCE(style, '') as style, "isFeatured", COALESCE("title_style", 'feature') as title_style, COALESCE(javascript, '') as javascript, COALESCE(dfp, '') as dfp, COALESCE("mobile_dfp", '') as mobile_dfp, "createdAt" FROM "Topic" WHERE id = $1 AND state = 'published'`
+
+	var t Topic
+	var dbID int
+	var sortOrder sql.NullInt64
+	var pubAt, createdAt sql.NullTime
+	var brief, apiDataBrief sql.NullString
+	var heroImageID, heroVideoID, ogImageID sql.NullInt64
+	err = r.db.QueryRowContext(ctx, query, idInt).Scan(&dbID, &t.Name, &t.Slug, &sortOrder, &t.State, &pubAt, &brief, &apiDataBrief, &t.Leading, &heroImageID, &t.HeroUrl, &heroVideoID, &t.OgTitle, &t.OgDescription, &ogImageID, &t.Type, &t.Style, &t.IsFeatured, &t.TitleStyle, &t.Javascript, &t.Dfp, &t.MobileDfp, &createdAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	t.ID = strconv.Itoa(dbID)
+	if sortOrder.Valid {
+		val := int(sortOrder.Int64)
+		t.SortOrder = &val
+	}
+	if pubAt.Valid {
+		t.PublishedDate = pubAt.Time.Format(timeLayoutMilli)
+	}
+	if createdAt.Valid {
+		t.CreatedAt = createdAt.Time.Format(timeLayoutMilli)
+	}
+	if brief.Valid && brief.String != "" {
+		if err := json.Unmarshal([]byte(brief.String), &t.Brief); err != nil {
+			t.Brief = map[string]any{}
+		}
+	}
+	if apiDataBrief.Valid && apiDataBrief.String != "" {
+		t.ApiDataBrief = decodeJSONBytesAny([]byte(apiDataBrief.String))
+	}
+
+	t.Metadata = map[string]any{}
+	heroImageIDs := []int{}
+	heroVideoIDs := []int{}
+	ogImageIDs := []int{}
+	if heroImageID.Valid {
+		heroImageIDs = append(heroImageIDs, int(heroImageID.Int64))
+		t.Metadata["heroImageID"] = int(heroImageID.Int64)
+	}
+	if heroVideoID.Valid {
+		heroVideoIDs = append(heroVideoIDs, int(heroVideoID.Int64))
+		t.Metadata["heroVideoID"] = int(heroVideoID.Int64)
+	}
+	if ogImageID.Valid {
+		ogImageIDs = append(ogImageIDs, int(ogImageID.Int64))
+		t.Metadata["ogImageID"] = int(ogImageID.Int64)
+	}
+
+	topics := []Topic{t}
+	if err := r.enrichTopics(ctx, &topics, []int{dbID}, heroImageIDs, heroVideoIDs, ogImageIDs); err != nil {
+		return nil, err
+	}
+
+	return &topics[0], nil
+}
+
+// enrichTopics 豐富 topics 資料（heroImage, heroVideo, ogImage, slideshow_images, tags, posts, sections）
+func (r *Repo) enrichTopics(ctx context.Context, topics *[]Topic, topicIDs []int, heroImageIDs []int, heroVideoIDs []int, ogImageIDs []int) error {
+	if len(*topics) == 0 {
+		return nil
+	}
+
+	// Fetch images
+	allImageIDs := append(append(heroImageIDs, ogImageIDs...), []int{}...)
+	imagesMap, err := r.fetchImages(ctx, allImageIDs)
+	if err != nil {
+		return err
+	}
+
+	// Fetch videos
+	videosMap, _, err := r.fetchVideos(ctx, heroVideoIDs)
+	if err != nil {
+		return err
+	}
+
+	// Fetch slideshow images
+	slideshowMap, err := r.fetchTopicSlideshowImages(ctx, topicIDs)
+	if err != nil {
+		return err
+	}
+
+	// Fetch tags
+	tagsMap, err := r.fetchTopicTags(ctx, topicIDs)
+	if err != nil {
+		return err
+	}
+
+	// Fetch posts
+	postsMap, err := r.fetchTopicPosts(ctx, topicIDs)
+	if err != nil {
+		return err
+	}
+
+	// Fetch sections
+	sectionsMap, err := r.fetchTopicSections(ctx, topicIDs)
+	if err != nil {
+		return err
+	}
+
+	// Assign to topics
+	for i := range *topics {
+		t := &(*topics)[i]
+		id, _ := strconv.Atoi(t.ID)
+
+		// Hero image
+		if heroImageID, ok := t.Metadata["heroImageID"].(int); ok {
+			if img, ok := imagesMap[heroImageID]; ok {
+				t.HeroImage = img
+			}
+		}
+
+		// Hero video
+		if heroVideoID, ok := t.Metadata["heroVideoID"].(int); ok {
+			if vid, ok := videosMap[heroVideoID]; ok {
+				t.HeroVideo = vid
+			}
+		}
+
+		// OG image
+		if ogImageID, ok := t.Metadata["ogImageID"].(int); ok {
+			if img, ok := imagesMap[ogImageID]; ok {
+				t.OgImage = img
+			}
+		}
+
+		// Slideshow images
+		t.SlideshowImages = slideshowMap[id]
+
+		// Tags
+		t.Tags = tagsMap[id]
+
+		// Posts
+		t.Posts = postsMap[id]
+
+		// Sections
+		t.Sections = sectionsMap[id]
+	}
+
+	return nil
+}
+
+// fetchTopicSlideshowImages 查詢 topic 的 slideshow images
+func (r *Repo) fetchTopicSlideshowImages(ctx context.Context, topicIDs []int) (map[int][]Photo, error) {
+	result := map[int][]Photo{}
+	if len(topicIDs) == 0 {
+		return result, nil
+	}
+	// 根據 schema.prisma，Topic.slideshow_images 是透過 _Topic_slideshow_images 表關聯
+	query := `
+		SELECT tsi."A" as topic_id, i.id, COALESCE(i."imageFile_id", ''), COALESCE(i."imageFile_extension", ''), i."imageFile_width", i."imageFile_height"
+		FROM "_Topic_slideshow_images" tsi
+		JOIN "Image" i ON i.id = tsi."B"
+		WHERE tsi."A" = ANY($1)
+		ORDER BY tsi."A", tsi."B"
+	`
+	rows, err := r.db.QueryContext(ctx, query, pqIntArray(topicIDs))
+	if err != nil {
+		return result, nil
+	}
+	defer rows.Close()
+	imageIDs := []int{}
+	imageMap := map[int]int{} // imageID -> topicID
+	for rows.Next() {
+		var topicID, imageID int
+		var fileID, ext string
+		var width, height sql.NullInt64
+		if err := rows.Scan(&topicID, &imageID, &fileID, &ext, &width, &height); err != nil {
+			return result, err
+		}
+		imageIDs = append(imageIDs, imageID)
+		imageMap[imageID] = topicID
+	}
+	if len(imageIDs) > 0 {
+		images, err := r.fetchImages(ctx, imageIDs)
+		if err == nil {
+			for imageID, topicID := range imageMap {
+				if img, ok := images[imageID]; ok {
+					result[topicID] = append(result[topicID], *img)
+				}
+			}
+		}
+	}
+	return result, rows.Err()
+}
+
+// fetchTopicTags 查詢 topic 的 tags
+func (r *Repo) fetchTopicTags(ctx context.Context, topicIDs []int) (map[int][]Tag, error) {
+	result := map[int][]Tag{}
+	if len(topicIDs) == 0 {
+		return result, nil
+	}
+	// 根據 schema.prisma，Topic.tags 是透過 Tag_topics 表關聯（Tag 是 A，Topic 是 B）
+	query := `
+		SELECT tt."B" as topic_id, t.id, t.name, t.slug
+		FROM "_Tag_topics" tt
+		JOIN "Tag" t ON t.id = tt."A"
+		WHERE tt."B" = ANY($1)
+		ORDER BY tt."B", t.id
+	`
+	rows, err := r.db.QueryContext(ctx, query, pqIntArray(topicIDs))
+	if err != nil {
+		return result, nil
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var topicID int
+		var tag Tag
+		if err := rows.Scan(&topicID, &tag.ID, &tag.Name, &tag.Slug); err != nil {
+			return result, err
+		}
+		result[topicID] = append(result[topicID], tag)
+	}
+	return result, rows.Err()
+}
+
+// fetchTopicPosts 查詢 topic 的 posts
+func (r *Repo) fetchTopicPosts(ctx context.Context, topicIDs []int) (map[int][]Post, error) {
+	result := map[int][]Post{}
+	if len(topicIDs) == 0 {
+		return result, nil
+	}
+	// 根據 schema.prisma，Topic.posts 是透過 Post.topics 欄位關聯（Post.topics 是 Topic 的 foreign key）
+	query := `
+		SELECT p.topics as topic_id, p.id, p.slug, p.title, p."heroImage"
+		FROM "Post" p
+		WHERE p.topics = ANY($1) AND p.state = 'published'
+		ORDER BY p.topics, p."publishedDate" DESC, p.id DESC
+	`
+	rows, err := r.db.QueryContext(ctx, query, pqIntArray(topicIDs))
+	if err != nil {
+		return result, nil
+	}
+	defer rows.Close()
+	postIDs := []int{}
+	postMap := map[int]int{} // postID -> topicID
+	imageIDs := []int{}
+	for rows.Next() {
+		var topicID, postID int
+		var slug, title string
+		var heroID sql.NullInt64
+		if err := rows.Scan(&topicID, &postID, &slug, &title, &heroID); err != nil {
+			return result, err
+		}
+		postIDs = append(postIDs, postID)
+		postMap[postID] = topicID
+		if heroID.Valid {
+			imageIDs = append(imageIDs, int(heroID.Int64))
+		}
+	}
+	if len(postIDs) > 0 {
+		// 這裡簡化處理，只返回基本的 post 資訊
+		// 如果需要完整的 post 資料，可以調用 enrichPosts
+		for _, postID := range postIDs {
+			post := Post{
+				ID: strconv.Itoa(postID),
+			}
+			if topicID, ok := postMap[postID]; ok {
+				result[topicID] = append(result[topicID], post)
+			}
+		}
+	}
+	return result, rows.Err()
+}
+
+// fetchTopicSections 查詢 topic 的 sections
+func (r *Repo) fetchTopicSections(ctx context.Context, topicIDs []int) (map[int][]Section, error) {
+	result := map[int][]Section{}
+	if len(topicIDs) == 0 {
+		return result, nil
+	}
+	// 根據 schema.prisma，Topic.sections 是透過 _Section_topics 表關聯（Section 是 A，Topic 是 B）
+	query := `
+		SELECT st."B" as topic_id, s.id, s.name, s.slug, s.state, COALESCE(s.color, '') as color
+		FROM "_Section_topics" st
+		JOIN "Section" s ON s.id = st."A"
+		WHERE st."B" = ANY($1)
+		ORDER BY st."B", s.id
+	`
+	rows, err := r.db.QueryContext(ctx, query, pqIntArray(topicIDs))
+	if err != nil {
+		return result, nil
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var topicID int
+		var s Section
+		if err := rows.Scan(&topicID, &s.ID, &s.Name, &s.Slug, &s.State, &s.Color); err != nil {
+			return result, err
+		}
+		result[topicID] = append(result[topicID], s)
+	}
+	return result, rows.Err()
+}
+
+// QueryVideos 查詢 videos
+func (r *Repo) QueryVideos(ctx context.Context, where *VideoWhereInput, orders []OrderRule, take, skip int) ([]Video, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	where = ensureVideoPublished(where)
+
+	sb := strings.Builder{}
+	sb.WriteString(`SELECT id, COALESCE(name, '') as name, "isShorts", COALESCE("youtubeUrl", '') as youtubeUrl, COALESCE("fileDuration", '') as fileDuration, COALESCE("youtubeDuration", '') as youtubeDuration, COALESCE(content, '') as content, "heroImage", COALESCE(uploader, '') as uploader, COALESCE("uploaderEmail", '') as uploaderEmail, "isFeed", COALESCE("videoSection", 'news') as videoSection, state, "publishedDate", COALESCE("publishedDateString", '') as publishedDateString, "updateTimeStamp", "createdAt" FROM "Video" v`)
+
+	conds := []string{}
+	args := []interface{}{}
+	argIdx := 1
+
+	buildStringFilter := func(field string, f *StringFilter) {
+		if f == nil {
+			return
+		}
+		if f.Equals != nil {
+			conds = append(conds, fmt.Sprintf(`%s = $%d`, field, argIdx))
+			args = append(args, *f.Equals)
+			argIdx++
+		}
+		if f.Not != nil && f.Not.Equals != nil {
+			conds = append(conds, fmt.Sprintf(`%s <> $%d`, field, argIdx))
+			args = append(args, *f.Not.Equals)
+			argIdx++
+		}
+	}
+
+	if where != nil {
+		buildStringFilter("v.state", where.State)
+		buildStringFilter("v.videoSection", where.VideoSection)
+		buildStringFilter("v.youtubeUrl", where.YoutubeUrl)
+		if where.IsShorts != nil && where.IsShorts.Equals != nil {
+			conds = append(conds, fmt.Sprintf(`v."isShorts" = $%d`, argIdx))
+			args = append(args, *where.IsShorts.Equals)
+			argIdx++
+		}
+		if where.Tags != nil && where.Tags.Some != nil && where.Tags.Some.ID != nil && where.Tags.Some.ID.Equals != nil {
+			// 透過 _Video_tags 表查詢
+			sb.WriteString(` JOIN "_Video_tags" vt ON vt."A" = v.id`)
+			tagID, err := strconv.Atoi(*where.Tags.Some.ID.Equals)
+			if err == nil {
+				conds = append(conds, fmt.Sprintf(`vt."B" = $%d`, argIdx))
+				args = append(args, tagID)
+				argIdx++
+			}
+		}
+	}
+
+	if len(conds) > 0 {
+		sb.WriteString(" WHERE ")
+		sb.WriteString(strings.Join(conds, " AND "))
+	}
+
+	if len(orders) > 0 {
+		sb.WriteString(" ORDER BY ")
+		orderParts := []string{}
+		for _, o := range orders {
+			dir := "ASC"
+			if o.Direction == "desc" {
+				dir = "DESC"
+			}
+			switch o.Field {
+			case "publishedDate":
+				orderParts = append(orderParts, fmt.Sprintf(`v."publishedDate" %s`, dir))
+			case "id":
+				orderParts = append(orderParts, fmt.Sprintf(`v.id %s`, dir))
+			}
+		}
+		if len(orderParts) > 0 {
+			sb.WriteString(strings.Join(orderParts, ", "))
+		}
+	} else {
+		sb.WriteString(` ORDER BY v."publishedDate" DESC`)
+	}
+
+	if take > 0 {
+		sb.WriteString(fmt.Sprintf(" LIMIT %d", take))
+	}
+	if skip > 0 {
+		sb.WriteString(fmt.Sprintf(" OFFSET %d", skip))
+	}
+
+	rows, err := r.db.QueryContext(ctx, sb.String(), args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := []Video{}
+	videoIDs := []int{}
+	heroImageIDs := []int{}
+	for rows.Next() {
+		var v Video
+		var dbID int
+		var pubAt, createdAt sql.NullTime
+		var heroImageID sql.NullInt64
+		if err := rows.Scan(&dbID, &v.Name, &v.IsShorts, &v.YoutubeUrl, &v.FileDuration, &v.YoutubeDuration, &v.Content, &heroImageID, &v.Uploader, &v.UploaderEmail, &v.IsFeed, &v.VideoSection, &v.State, &pubAt, &v.PublishedDateString, &v.UpdateTimeStamp, &createdAt); err != nil {
+			return nil, err
+		}
+		v.ID = strconv.Itoa(dbID)
+		if pubAt.Valid {
+			v.PublishedDate = pubAt.Time.Format(timeLayoutMilli)
+		}
+		if createdAt.Valid {
+			v.CreatedAt = createdAt.Time.Format(timeLayoutMilli)
+		}
+		// 根據 schema.prisma，Video.videoSrc 是 virtual field，需要從 file 或 youtubeUrl 生成
+		// 這裡先設為空字串，後續可以在 resolver 中處理
+		v.VideoSrc = ""
+		if heroImageID.Valid {
+			heroImageIDs = append(heroImageIDs, int(heroImageID.Int64))
+			v.Metadata = map[string]any{"heroImageID": int(heroImageID.Int64)}
+		}
+		result = append(result, v)
+		videoIDs = append(videoIDs, dbID)
+	}
+
+	// Enrich videos
+	if err := r.enrichVideos(ctx, &result, videoIDs, heroImageIDs); err != nil {
+		return nil, err
+	}
+
+	return result, rows.Err()
+}
+
+// QueryVideosCount 查詢 videos 數量
+func (r *Repo) QueryVideosCount(ctx context.Context, where *VideoWhereInput) (int, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	where = ensureVideoPublished(where)
+
+	sb := strings.Builder{}
+	sb.WriteString(`SELECT COUNT(*) FROM "Video" v`)
+
+	conds := []string{}
+	args := []interface{}{}
+	argIdx := 1
+
+	buildStringFilter := func(field string, f *StringFilter) {
+		if f == nil {
+			return
+		}
+		if f.Equals != nil {
+			conds = append(conds, fmt.Sprintf(`%s = $%d`, field, argIdx))
+			args = append(args, *f.Equals)
+			argIdx++
+		}
+		if f.Not != nil && f.Not.Equals != nil {
+			conds = append(conds, fmt.Sprintf(`%s <> $%d`, field, argIdx))
+			args = append(args, *f.Not.Equals)
+			argIdx++
+		}
+	}
+
+	if where != nil {
+		buildStringFilter("v.state", where.State)
+		buildStringFilter("v.videoSection", where.VideoSection)
+		buildStringFilter("v.youtubeUrl", where.YoutubeUrl)
+		if where.IsShorts != nil && where.IsShorts.Equals != nil {
+			conds = append(conds, fmt.Sprintf(`v."isShorts" = $%d`, argIdx))
+			args = append(args, *where.IsShorts.Equals)
+			argIdx++
+		}
+		if where.Tags != nil && where.Tags.Some != nil && where.Tags.Some.ID != nil && where.Tags.Some.ID.Equals != nil {
+			sb.WriteString(` JOIN "_Video_tags" vt ON vt."A" = v.id`)
+			tagID, err := strconv.Atoi(*where.Tags.Some.ID.Equals)
+			if err == nil {
+				conds = append(conds, fmt.Sprintf(`vt."B" = $%d`, argIdx))
+				args = append(args, tagID)
+				argIdx++
+			}
+		}
+	}
+
+	if len(conds) > 0 {
+		sb.WriteString(" WHERE ")
+		sb.WriteString(strings.Join(conds, " AND "))
+	}
+
+	var count int
+	err := r.db.QueryRowContext(ctx, sb.String(), args...).Scan(&count)
+	return count, err
+}
+
+// QueryVideoByUnique 根據 unique input 查詢單一 video
+func (r *Repo) QueryVideoByUnique(ctx context.Context, where *VideoWhereUniqueInput) (*Video, error) {
+	if where == nil {
+		return nil, nil
+	}
+	if where.ID != nil {
+		return r.QueryVideoByID(ctx, *where.ID)
+	}
+	return nil, nil
+}
+
+// QueryVideoByID 根據 ID 查詢單一 video
+func (r *Repo) QueryVideoByID(ctx context.Context, id string) (*Video, error) {
+	idInt, err := strconv.Atoi(id)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	query := `SELECT id, COALESCE(name, '') as name, "isShorts", COALESCE("youtubeUrl", '') as youtubeUrl, COALESCE("fileDuration", '') as fileDuration, COALESCE("youtubeDuration", '') as youtubeDuration, COALESCE(content, '') as content, "heroImage", COALESCE(uploader, '') as uploader, COALESCE("uploaderEmail", '') as uploaderEmail, "isFeed", COALESCE("videoSection", 'news') as videoSection, state, "publishedDate", COALESCE("publishedDateString", '') as publishedDateString, "updateTimeStamp", "createdAt" FROM "Video" WHERE id = $1 AND state = 'published'`
+
+	var v Video
+	var dbID int
+	var pubAt, createdAt sql.NullTime
+	var heroImageID sql.NullInt64
+	err = r.db.QueryRowContext(ctx, query, idInt).Scan(&dbID, &v.Name, &v.IsShorts, &v.YoutubeUrl, &v.FileDuration, &v.YoutubeDuration, &v.Content, &heroImageID, &v.Uploader, &v.UploaderEmail, &v.IsFeed, &v.VideoSection, &v.State, &pubAt, &v.PublishedDateString, &v.UpdateTimeStamp, &createdAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	v.ID = strconv.Itoa(dbID)
+	if pubAt.Valid {
+		v.PublishedDate = pubAt.Time.Format(timeLayoutMilli)
+	}
+	if createdAt.Valid {
+		v.CreatedAt = createdAt.Time.Format(timeLayoutMilli)
+	}
+	v.VideoSrc = ""
+	if heroImageID.Valid {
+		heroImageIDs := []int{int(heroImageID.Int64)}
+		v.Metadata = map[string]any{"heroImageID": int(heroImageID.Int64)}
+		videos := []Video{v}
+		if err := r.enrichVideos(ctx, &videos, []int{dbID}, heroImageIDs); err != nil {
+			return nil, err
+		}
+		return &videos[0], nil
+	}
+	return &v, nil
+}
+
+// enrichVideos 豐富 videos 資料（heroImage, tags, related_posts）
+func (r *Repo) enrichVideos(ctx context.Context, videos *[]Video, videoIDs []int, heroImageIDs []int) error {
+	if len(*videos) == 0 {
+		return nil
+	}
+
+	// Fetch images
+	imagesMap, err := r.fetchImages(ctx, heroImageIDs)
+	if err != nil {
+		return err
+	}
+
+	// Fetch tags
+	tagsMap, err := r.fetchVideoTags(ctx, videoIDs)
+	if err != nil {
+		return err
+	}
+
+	// Fetch related posts
+	postsMap, err := r.fetchVideoRelatedPosts(ctx, videoIDs)
+	if err != nil {
+		return err
+	}
+
+	// Assign to videos
+	for i := range *videos {
+		v := &(*videos)[i]
+		id, _ := strconv.Atoi(v.ID)
+
+		// Hero image
+		if heroImageID, ok := v.Metadata["heroImageID"].(int); ok {
+			if img, ok := imagesMap[heroImageID]; ok {
+				v.HeroImage = img
+			}
+		}
+
+		// Tags
+		v.Tags = tagsMap[id]
+
+		// Related posts
+		v.RelatedPosts = postsMap[id]
+	}
+
+	return nil
+}
+
+// fetchVideoTags 查詢 video 的 tags
+func (r *Repo) fetchVideoTags(ctx context.Context, videoIDs []int) (map[int][]Tag, error) {
+	result := map[int][]Tag{}
+	if len(videoIDs) == 0 {
+		return result, nil
+	}
+	// 根據 schema.prisma，Video.tags 是透過 _Video_tags 表關聯（Video 是 A，Tag 是 B）
+	query := `
+		SELECT vt."A" as video_id, t.id, t.name, t.slug
+		FROM "_Video_tags" vt
+		JOIN "Tag" t ON t.id = vt."B"
+		WHERE vt."A" = ANY($1)
+		ORDER BY vt."A", t.id
+	`
+	rows, err := r.db.QueryContext(ctx, query, pqIntArray(videoIDs))
+	if err != nil {
+		return result, nil
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var videoID int
+		var tag Tag
+		if err := rows.Scan(&videoID, &tag.ID, &tag.Name, &tag.Slug); err != nil {
+			return result, err
+		}
+		result[videoID] = append(result[videoID], tag)
+	}
+	return result, rows.Err()
+}
+
+// fetchVideoRelatedPosts 查詢 video 的 related posts
+func (r *Repo) fetchVideoRelatedPosts(ctx context.Context, videoIDs []int) (map[int][]Post, error) {
+	result := map[int][]Post{}
+	if len(videoIDs) == 0 {
+		return result, nil
+	}
+	// 根據 schema.prisma，Video.related_posts 是透過 Post_related_videos 表關聯（Post 是 A，Video 是 B）
+	query := `
+		SELECT prv."B" as video_id, p.id, p.slug, p.title, p."heroImage"
+		FROM "_Post_related_videos" prv
+		JOIN "Post" p ON p.id = prv."A"
+		WHERE prv."B" = ANY($1) AND p.state = 'published'
+		ORDER BY prv."B", p."publishedDate" DESC, p.id DESC
+	`
+	rows, err := r.db.QueryContext(ctx, query, pqIntArray(videoIDs))
+	if err != nil {
+		return result, nil
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var videoID int
+		var post Post
+		var dbID int
+		var heroID sql.NullInt64
+		if err := rows.Scan(&videoID, &dbID, &post.Slug, &post.Title, &heroID); err != nil {
+			return result, err
+		}
+		post.ID = strconv.Itoa(dbID)
+		if heroID.Valid {
+			post.Metadata = map[string]any{"heroImageID": int(heroID.Int64)}
+		}
+		result[videoID] = append(result[videoID], post)
+	}
+	return result, rows.Err()
 }

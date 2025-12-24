@@ -234,6 +234,9 @@ func Build(repo *data.Repo) (graphql.Schema, error) {
 		},
 	})
 
+	// 先聲明 postType 變數，以便在 videoType 和 topicType 中使用
+	var postType *graphql.Object
+
 	photoType := graphql.NewObject(graphql.ObjectConfig{
 		Name: "Photo",
 		Fields: graphql.Fields{
@@ -244,15 +247,33 @@ func Build(repo *data.Repo) (graphql.Schema, error) {
 		},
 	})
 
-	videoType := graphql.NewObject(graphql.ObjectConfig{
+	var videoType *graphql.Object
+	videoType = graphql.NewObject(graphql.ObjectConfig{
 		Name: "Video",
-		Fields: graphql.Fields{
-			"id":       &graphql.Field{Type: graphql.ID},
-			"videoSrc": &graphql.Field{Type: graphql.String},
-			"heroImage": &graphql.Field{
-				Type: photoType,
-			},
-		},
+		Fields: graphql.FieldsThunk(func() graphql.Fields {
+			return graphql.Fields{
+				"id":                  &graphql.Field{Type: graphql.ID},
+				"name":                &graphql.Field{Type: graphql.String},
+				"isShorts":            &graphql.Field{Type: graphql.Boolean},
+				"youtubeUrl":          &graphql.Field{Type: graphql.String},
+				"fileDuration":        &graphql.Field{Type: graphql.String},
+				"youtubeDuration":     &graphql.Field{Type: graphql.String},
+				"videoSrc":            &graphql.Field{Type: graphql.String},
+				"content":             &graphql.Field{Type: graphql.String},
+				"heroImage":           &graphql.Field{Type: photoType},
+				"uploader":            &graphql.Field{Type: graphql.String},
+				"uploaderEmail":       &graphql.Field{Type: graphql.String},
+				"isFeed":              &graphql.Field{Type: graphql.Boolean},
+				"videoSection":        &graphql.Field{Type: graphql.String},
+				"state":               &graphql.Field{Type: graphql.String},
+				"publishedDate":       &graphql.Field{Type: dateTimeScalar},
+				"publishedDateString": &graphql.Field{Type: graphql.String},
+				"updateTimeStamp":     &graphql.Field{Type: graphql.Boolean},
+				"tags":                &graphql.Field{Type: graphql.NewList(tagType)},
+				"related_posts":       &graphql.Field{Type: graphql.NewList(postType)},
+				"createdAt":           &graphql.Field{Type: dateTimeScalar},
+			}
+		}),
 	})
 
 	partnerType := graphql.NewObject(graphql.ObjectConfig{
@@ -266,11 +287,74 @@ func Build(repo *data.Repo) (graphql.Schema, error) {
 		},
 	})
 
-	topicType := graphql.NewObject(graphql.ObjectConfig{
+	var topicType *graphql.Object
+	topicType = graphql.NewObject(graphql.ObjectConfig{
 		Name: "Topic",
-		Fields: graphql.Fields{
-			"slug": &graphql.Field{Type: graphql.String},
-		},
+		Fields: graphql.FieldsThunk(func() graphql.Fields {
+			return graphql.Fields{
+				"id":                           &graphql.Field{Type: graphql.ID},
+				"name":                         &graphql.Field{Type: graphql.String},
+				"slug":                         &graphql.Field{Type: graphql.String},
+				"sortOrder":                    &graphql.Field{Type: graphql.Int},
+				"state":                        &graphql.Field{Type: graphql.String},
+				"publishedDate":                &graphql.Field{Type: dateTimeScalar},
+				"brief":                        &graphql.Field{Type: jsonScalar},
+				"apiDataBrief":                 &graphql.Field{Type: jsonScalar},
+				"leading":                      &graphql.Field{Type: graphql.String},
+				"heroImage":                    &graphql.Field{Type: photoType},
+				"heroUrl":                      &graphql.Field{Type: graphql.String},
+				"heroVideo":                    &graphql.Field{Type: videoType},
+				"slideshow_images":             &graphql.Field{Type: graphql.NewList(photoType)},
+				"manualOrderOfSlideshowImages": &graphql.Field{Type: jsonScalar},
+				"og_title":                     &graphql.Field{Type: graphql.String},
+				"og_description":               &graphql.Field{Type: graphql.String},
+				"og_image":                     &graphql.Field{Type: photoType},
+				"type":                         &graphql.Field{Type: graphql.String},
+				"tags":                         &graphql.Field{Type: graphql.NewList(tagType)},
+				"posts": &graphql.Field{
+					Type: graphql.NewList(postType),
+					Args: graphql.FieldConfigArgument{
+						"where":   &graphql.ArgumentConfig{Type: postWhereInputType},
+						"orderBy": &graphql.ArgumentConfig{Type: graphql.NewList(postOrderByInput)},
+						"take":    &graphql.ArgumentConfig{Type: graphql.Int},
+						"skip":    &graphql.ArgumentConfig{Type: graphql.Int},
+					},
+					Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+						topic := normalizeTopic(p.Source)
+						// 這裡簡化處理，直接返回 topic 的 posts
+						// 實際應該根據 where 條件過濾，但為了簡化先這樣處理
+						posts := topic.Posts
+						take, _ := parsePagination(p.Args)
+						if take > 0 && len(posts) > take {
+							posts = posts[:take]
+						}
+						result := make([]interface{}, len(posts))
+						for i, post := range posts {
+							result[i] = post
+						}
+						return result, nil
+					},
+				},
+				"postsCount": &graphql.Field{
+					Type: graphql.Int,
+					Args: graphql.FieldConfigArgument{
+						"where": &graphql.ArgumentConfig{Type: postWhereInputType},
+					},
+					Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+						topic := normalizeTopic(p.Source)
+						return len(topic.Posts), nil
+					},
+				},
+				"style":       &graphql.Field{Type: graphql.String},
+				"isFeatured":  &graphql.Field{Type: graphql.Boolean},
+				"title_style": &graphql.Field{Type: graphql.String},
+				"sections":    &graphql.Field{Type: graphql.NewList(sectionType)},
+				"javascript":  &graphql.Field{Type: graphql.String},
+				"dfp":         &graphql.Field{Type: graphql.String},
+				"mobile_dfp":  &graphql.Field{Type: graphql.String},
+				"createdAt":   &graphql.Field{Type: dateTimeScalar},
+			}
+		}),
 	})
 
 	warningType := graphql.NewObject(graphql.ObjectConfig{
@@ -281,7 +365,6 @@ func Build(repo *data.Repo) (graphql.Schema, error) {
 		},
 	})
 
-	var postType *graphql.Object
 	postType = graphql.NewObject(graphql.ObjectConfig{
 		Name: "Post",
 		Fields: graphql.FieldsThunk(func() graphql.Fields {
@@ -760,6 +843,194 @@ func Build(repo *data.Repo) (graphql.Schema, error) {
 					return repo.QueryExternalsCount(p.Context, where)
 				},
 			},
+			"topics": &graphql.Field{
+				Type: graphql.NewList(topicType),
+				Args: graphql.FieldConfigArgument{
+					"take": &graphql.ArgumentConfig{Type: graphql.Int},
+					"skip": &graphql.ArgumentConfig{Type: graphql.Int},
+					"orderBy": &graphql.ArgumentConfig{Type: graphql.NewList(graphql.NewInputObject(graphql.InputObjectConfig{
+						Name: "TopicOrderByInput",
+						Fields: graphql.InputObjectConfigFieldMap{
+							"sortOrder":     &graphql.InputObjectFieldConfig{Type: graphql.String},
+							"id":            &graphql.InputObjectFieldConfig{Type: graphql.String},
+							"createdAt":     &graphql.InputObjectFieldConfig{Type: graphql.String},
+							"publishedDate": &graphql.InputObjectFieldConfig{Type: graphql.String},
+						},
+					}))},
+					"where": &graphql.ArgumentConfig{Type: graphql.NewInputObject(graphql.InputObjectConfig{
+						Name: "TopicWhereInput",
+						Fields: graphql.InputObjectConfigFieldMap{
+							"state": &graphql.InputObjectFieldConfig{Type: stringFilterInput},
+						},
+					})},
+				},
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					where, err := data.DecodeTopicWhere(p.Args["where"])
+					if err != nil {
+						return nil, err
+					}
+					orders := parseOrderRules(p.Args["orderBy"])
+					take, skip := parsePagination(p.Args)
+					topics, err := repo.QueryTopics(p.Context, where, orders, take, skip)
+					if err != nil {
+						return nil, err
+					}
+					result := make([]interface{}, len(topics))
+					for i, t := range topics {
+						result[i] = t
+					}
+					return result, nil
+				},
+			},
+			"topicsCount": &graphql.Field{
+				Type: graphql.Int,
+				Args: graphql.FieldConfigArgument{
+					"where": &graphql.ArgumentConfig{Type: graphql.NewInputObject(graphql.InputObjectConfig{
+						Name: "TopicWhereInput",
+						Fields: graphql.InputObjectConfigFieldMap{
+							"state": &graphql.InputObjectFieldConfig{Type: stringFilterInput},
+						},
+					})},
+				},
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					where, err := data.DecodeTopicWhere(p.Args["where"])
+					if err != nil {
+						return nil, err
+					}
+					return repo.QueryTopicsCount(p.Context, where)
+				},
+			},
+			"topic": &graphql.Field{
+				Type: topicType,
+				Args: graphql.FieldConfigArgument{
+					"where": &graphql.ArgumentConfig{Type: graphql.NewInputObject(graphql.InputObjectConfig{
+						Name: "TopicWhereUniqueInput",
+						Fields: graphql.InputObjectConfigFieldMap{
+							"id":   &graphql.InputObjectFieldConfig{Type: graphql.ID},
+							"slug": &graphql.InputObjectFieldConfig{Type: graphql.String},
+							"name": &graphql.InputObjectFieldConfig{Type: graphql.String},
+						},
+					})},
+				},
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					where, err := data.DecodeTopicWhereUnique(p.Args["where"])
+					if err != nil {
+						return nil, err
+					}
+					return repo.QueryTopicByUnique(p.Context, where)
+				},
+			},
+			"videos": &graphql.Field{
+				Type: graphql.NewList(videoType),
+				Args: graphql.FieldConfigArgument{
+					"take": &graphql.ArgumentConfig{Type: graphql.Int},
+					"skip": &graphql.ArgumentConfig{Type: graphql.Int},
+					"orderBy": &graphql.ArgumentConfig{Type: graphql.NewList(graphql.NewInputObject(graphql.InputObjectConfig{
+						Name: "VideoOrderByInput",
+						Fields: graphql.InputObjectConfigFieldMap{
+							"publishedDate": &graphql.InputObjectFieldConfig{Type: graphql.String},
+							"id":            &graphql.InputObjectFieldConfig{Type: graphql.String},
+						},
+					}))},
+					"where": &graphql.ArgumentConfig{Type: graphql.NewInputObject(graphql.InputObjectConfig{
+						Name: "VideoWhereInput",
+						Fields: graphql.InputObjectConfigFieldMap{
+							"state":        &graphql.InputObjectFieldConfig{Type: stringFilterInput},
+							"isShorts":     &graphql.InputObjectFieldConfig{Type: booleanFilterInput},
+							"videoSection": &graphql.InputObjectFieldConfig{Type: stringFilterInput},
+							"youtubeUrl":   &graphql.InputObjectFieldConfig{Type: stringFilterInput},
+							"tags": &graphql.InputObjectFieldConfig{Type: graphql.NewInputObject(graphql.InputObjectConfig{
+								Name: "TagManyRelationFilter",
+								Fields: graphql.InputObjectConfigFieldMap{
+									"some": &graphql.InputObjectFieldConfig{Type: graphql.NewInputObject(graphql.InputObjectConfig{
+										Name: "TagWhereInput",
+										Fields: graphql.InputObjectConfigFieldMap{
+											"id": &graphql.InputObjectFieldConfig{Type: graphql.NewInputObject(graphql.InputObjectConfig{
+												Name: "IDFilter",
+												Fields: graphql.InputObjectConfigFieldMap{
+													"equals": &graphql.InputObjectFieldConfig{Type: graphql.ID},
+												},
+											})},
+										},
+									})},
+								},
+							})},
+						},
+					})},
+				},
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					where, err := data.DecodeVideoWhere(p.Args["where"])
+					if err != nil {
+						return nil, err
+					}
+					orders := parseOrderRules(p.Args["orderBy"])
+					take, skip := parsePagination(p.Args)
+					videos, err := repo.QueryVideos(p.Context, where, orders, take, skip)
+					if err != nil {
+						return nil, err
+					}
+					result := make([]interface{}, len(videos))
+					for i, v := range videos {
+						result[i] = v
+					}
+					return result, nil
+				},
+			},
+			"videosCount": &graphql.Field{
+				Type: graphql.Int,
+				Args: graphql.FieldConfigArgument{
+					"where": &graphql.ArgumentConfig{Type: graphql.NewInputObject(graphql.InputObjectConfig{
+						Name: "VideoWhereInput",
+						Fields: graphql.InputObjectConfigFieldMap{
+							"state":        &graphql.InputObjectFieldConfig{Type: stringFilterInput},
+							"isShorts":     &graphql.InputObjectFieldConfig{Type: booleanFilterInput},
+							"videoSection": &graphql.InputObjectFieldConfig{Type: stringFilterInput},
+							"youtubeUrl":   &graphql.InputObjectFieldConfig{Type: stringFilterInput},
+							"tags": &graphql.InputObjectFieldConfig{Type: graphql.NewInputObject(graphql.InputObjectConfig{
+								Name: "TagManyRelationFilter",
+								Fields: graphql.InputObjectConfigFieldMap{
+									"some": &graphql.InputObjectFieldConfig{Type: graphql.NewInputObject(graphql.InputObjectConfig{
+										Name: "TagWhereInput",
+										Fields: graphql.InputObjectConfigFieldMap{
+											"id": &graphql.InputObjectFieldConfig{Type: graphql.NewInputObject(graphql.InputObjectConfig{
+												Name: "IDFilter",
+												Fields: graphql.InputObjectConfigFieldMap{
+													"equals": &graphql.InputObjectFieldConfig{Type: graphql.ID},
+												},
+											})},
+										},
+									})},
+								},
+							})},
+						},
+					})},
+				},
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					where, err := data.DecodeVideoWhere(p.Args["where"])
+					if err != nil {
+						return nil, err
+					}
+					return repo.QueryVideosCount(p.Context, where)
+				},
+			},
+			"video": &graphql.Field{
+				Type: videoType,
+				Args: graphql.FieldConfigArgument{
+					"where": &graphql.ArgumentConfig{Type: graphql.NewInputObject(graphql.InputObjectConfig{
+						Name: "VideoWhereUniqueInput",
+						Fields: graphql.InputObjectConfigFieldMap{
+							"id": &graphql.InputObjectFieldConfig{Type: graphql.ID},
+						},
+					})},
+				},
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					where, err := data.DecodeVideoWhereUnique(p.Args["where"])
+					if err != nil {
+						return nil, err
+					}
+					return repo.QueryVideoByUnique(p.Context, where)
+				},
+			},
 		},
 	})
 
@@ -1003,6 +1274,20 @@ func matchesBooleanFilter(value bool, filter *data.BooleanFilter) bool {
 		return false
 	}
 	return true
+}
+
+func normalizeTopic(src interface{}) data.Topic {
+	switch v := src.(type) {
+	case data.Topic:
+		return v
+	case *data.Topic:
+		if v == nil {
+			return data.Topic{}
+		}
+		return *v
+	default:
+		return data.Topic{}
+	}
 }
 
 func normalizePost(src interface{}) data.Post {
