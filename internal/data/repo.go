@@ -2846,7 +2846,11 @@ func (r *Repo) enrichVideos(ctx context.Context, videos *[]Video, videoIDs []int
 		}
 
 		// Tags
-		v.Tags = tagsMap[id]
+		if tags, ok := tagsMap[id]; ok {
+			v.Tags = tags
+		} else {
+			v.Tags = []Tag{}
+		}
 
 		// Related posts
 		v.RelatedPosts = postsMap[id]
@@ -2861,7 +2865,7 @@ func (r *Repo) fetchVideoTags(ctx context.Context, videoIDs []int) (map[int][]Ta
 	if len(videoIDs) == 0 {
 		return result, nil
 	}
-	// 根據 schema.prisma，Video.tags 是透過 _Video_tags 表關聯（Video 是 A，Tag 是 B）
+	// 根據 Video.ts，Video.tags 是透過 _Video_tags 表關聯（Video 是 A，Tag 是 B）
 	query := `
 		SELECT vt."A" as video_id, t.id, t.name, t.slug
 		FROM "_Video_tags" vt
@@ -2877,9 +2881,11 @@ func (r *Repo) fetchVideoTags(ctx context.Context, videoIDs []int) (map[int][]Ta
 	for rows.Next() {
 		var videoID int
 		var tag Tag
-		if err := rows.Scan(&videoID, &tag.ID, &tag.Name, &tag.Slug); err != nil {
+		var tagID int
+		if err := rows.Scan(&videoID, &tagID, &tag.Name, &tag.Slug); err != nil {
 			return result, err
 		}
+		tag.ID = strconv.Itoa(tagID)
 		result[videoID] = append(result[videoID], tag)
 	}
 	return result, rows.Err()
