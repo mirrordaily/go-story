@@ -384,17 +384,27 @@ func Build(repo *data.Repo) (graphql.Schema, error) {
 		Name: "Topic",
 		Fields: graphql.FieldsThunk(func() graphql.Fields {
 			return graphql.Fields{
-				"id":                           &graphql.Field{Type: graphql.ID},
-				"name":                         &graphql.Field{Type: graphql.String},
-				"slug":                         &graphql.Field{Type: graphql.String},
-				"sortOrder":                    &graphql.Field{Type: graphql.Int},
-				"state":                        &graphql.Field{Type: graphql.String},
-				"publishedDate":                &graphql.Field{Type: dateTimeScalar},
-				"brief":                        &graphql.Field{Type: jsonScalar},
-				"apiDataBrief":                 &graphql.Field{Type: jsonScalar},
-				"leading":                      &graphql.Field{Type: graphql.String},
-				"heroImage":                    &graphql.Field{Type: photoType},
-				"heroUrl":                      &graphql.Field{Type: graphql.String},
+				"id":            &graphql.Field{Type: graphql.ID},
+				"name":          &graphql.Field{Type: graphql.String},
+				"slug":          &graphql.Field{Type: graphql.String},
+				"sortOrder":     &graphql.Field{Type: graphql.Int},
+				"state":         &graphql.Field{Type: graphql.String},
+				"publishedDate": &graphql.Field{Type: dateTimeScalar},
+				"brief":         &graphql.Field{Type: jsonScalar},
+				"apiDataBrief":  &graphql.Field{Type: jsonScalar},
+				"leading":       &graphql.Field{Type: graphql.String},
+				"heroImage":     &graphql.Field{Type: photoType},
+				"heroUrl": &graphql.Field{
+					Type: graphql.String,
+					Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+						topic := normalizeTopic(p.Source)
+						// 當 heroUrl 為空字串時，返回 nil 以匹配 target 的行為
+						if topic.HeroUrl == "" {
+							return nil, nil
+						}
+						return topic.HeroUrl, nil
+					},
+				},
 				"heroVideo":                    &graphql.Field{Type: videoType},
 				"slideshow_images":             &graphql.Field{Type: graphql.NewList(photoType)},
 				"manualOrderOfSlideshowImages": &graphql.Field{Type: jsonScalar},

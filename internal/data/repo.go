@@ -1941,7 +1941,7 @@ func (r *Repo) QueryTopics(ctx context.Context, where *TopicWhereInput, orders [
 	where = ensureTopicPublished(where)
 
 	sb := strings.Builder{}
-	sb.WriteString(`SELECT id, name, slug, "sortOrder", state, "publishedDate", brief, "apiDataBrief", COALESCE("leading", '') as leading, "heroImage", COALESCE("heroUrl", '') as heroUrl, "heroVideo", COALESCE(og_title, '') as og_title, COALESCE(og_description, '') as og_description, "og_image", COALESCE(type, 'list') as type, COALESCE(style, '') as style, "isFeatured", COALESCE("title_style", 'feature') as title_style, COALESCE(javascript, '') as javascript, COALESCE(dfp, '') as dfp, COALESCE("mobile_dfp", '') as mobile_dfp, "createdAt" FROM "Topic" t`)
+	sb.WriteString(`SELECT id, name, slug, "sortOrder", state, "publishedDate", brief, "apiDataBrief", COALESCE("leading", '') as leading, "heroImage", "heroUrl", "heroVideo", COALESCE(og_title, '') as og_title, COALESCE(og_description, '') as og_description, "og_image", COALESCE(type, 'list') as type, COALESCE(style, '') as style, "isFeatured", COALESCE("title_style", 'feature') as title_style, COALESCE(javascript, '') as javascript, COALESCE(dfp, '') as dfp, COALESCE("mobile_dfp", '') as mobile_dfp, "createdAt" FROM "Topic" t`)
 
 	conds := []string{}
 	args := []interface{}{}
@@ -2018,8 +2018,14 @@ func (r *Repo) QueryTopics(ctx context.Context, where *TopicWhereInput, orders [
 		var pubAt, createdAt sql.NullTime
 		var brief, apiDataBrief sql.NullString
 		var heroImageID, heroVideoID, ogImageID sql.NullInt64
-		if err := rows.Scan(&dbID, &t.Name, &t.Slug, &sortOrder, &t.State, &pubAt, &brief, &apiDataBrief, &t.Leading, &heroImageID, &t.HeroUrl, &heroVideoID, &t.OgTitle, &t.OgDescription, &ogImageID, &t.Type, &t.Style, &t.IsFeatured, &t.TitleStyle, &t.Javascript, &t.Dfp, &t.MobileDfp, &createdAt); err != nil {
+		var heroUrl sql.NullString
+		if err := rows.Scan(&dbID, &t.Name, &t.Slug, &sortOrder, &t.State, &pubAt, &brief, &apiDataBrief, &t.Leading, &heroImageID, &heroUrl, &heroVideoID, &t.OgTitle, &t.OgDescription, &ogImageID, &t.Type, &t.Style, &t.IsFeatured, &t.TitleStyle, &t.Javascript, &t.Dfp, &t.MobileDfp, &createdAt); err != nil {
 			return nil, err
+		}
+		if heroUrl.Valid {
+			t.HeroUrl = heroUrl.String
+		} else {
+			t.HeroUrl = ""
 		}
 		t.ID = strconv.Itoa(dbID)
 		if sortOrder.Valid {
@@ -2127,7 +2133,7 @@ func (r *Repo) QueryTopicBySlug(ctx context.Context, slug string) (*Topic, error
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	query := `SELECT id, name, slug, "sortOrder", state, "publishedDate", brief, "apiDataBrief", COALESCE("leading", '') as leading, "heroImage", COALESCE("heroUrl", '') as heroUrl, "heroVideo", COALESCE(og_title, '') as og_title, COALESCE(og_description, '') as og_description, "og_image", COALESCE(type, 'list') as type, COALESCE(style, '') as style, "isFeatured", COALESCE("title_style", 'feature') as title_style, COALESCE(javascript, '') as javascript, COALESCE(dfp, '') as dfp, COALESCE("mobile_dfp", '') as mobile_dfp, "createdAt" FROM "Topic" WHERE slug = $1 AND state = 'published'`
+	query := `SELECT id, name, slug, "sortOrder", state, "publishedDate", brief, "apiDataBrief", COALESCE("leading", '') as leading, "heroImage", "heroUrl", "heroVideo", COALESCE(og_title, '') as og_title, COALESCE(og_description, '') as og_description, "og_image", COALESCE(type, 'list') as type, COALESCE(style, '') as style, "isFeatured", COALESCE("title_style", 'feature') as title_style, COALESCE(javascript, '') as javascript, COALESCE(dfp, '') as dfp, COALESCE("mobile_dfp", '') as mobile_dfp, "createdAt" FROM "Topic" WHERE slug = $1 AND state = 'published'`
 
 	var t Topic
 	var dbID int
@@ -2135,7 +2141,13 @@ func (r *Repo) QueryTopicBySlug(ctx context.Context, slug string) (*Topic, error
 	var pubAt, createdAt sql.NullTime
 	var brief, apiDataBrief sql.NullString
 	var heroImageID, heroVideoID, ogImageID sql.NullInt64
-	err := r.db.QueryRowContext(ctx, query, slug).Scan(&dbID, &t.Name, &t.Slug, &sortOrder, &t.State, &pubAt, &brief, &apiDataBrief, &t.Leading, &heroImageID, &t.HeroUrl, &heroVideoID, &t.OgTitle, &t.OgDescription, &ogImageID, &t.Type, &t.Style, &t.IsFeatured, &t.TitleStyle, &t.Javascript, &t.Dfp, &t.MobileDfp, &createdAt)
+	var heroUrl sql.NullString
+	err := r.db.QueryRowContext(ctx, query, slug).Scan(&dbID, &t.Name, &t.Slug, &sortOrder, &t.State, &pubAt, &brief, &apiDataBrief, &t.Leading, &heroImageID, &heroUrl, &heroVideoID, &t.OgTitle, &t.OgDescription, &ogImageID, &t.Type, &t.Style, &t.IsFeatured, &t.TitleStyle, &t.Javascript, &t.Dfp, &t.MobileDfp, &createdAt)
+	if heroUrl.Valid {
+		t.HeroUrl = heroUrl.String
+	} else {
+		t.HeroUrl = ""
+	}
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -2192,7 +2204,7 @@ func (r *Repo) QueryTopicByID(ctx context.Context, id string) (*Topic, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	query := `SELECT id, name, slug, "sortOrder", state, "publishedDate", brief, "apiDataBrief", COALESCE("leading", '') as leading, "heroImage", COALESCE("heroUrl", '') as heroUrl, "heroVideo", COALESCE(og_title, '') as og_title, COALESCE(og_description, '') as og_description, "og_image", COALESCE(type, 'list') as type, COALESCE(style, '') as style, "isFeatured", COALESCE("title_style", 'feature') as title_style, COALESCE(javascript, '') as javascript, COALESCE(dfp, '') as dfp, COALESCE("mobile_dfp", '') as mobile_dfp, "createdAt" FROM "Topic" WHERE id = $1 AND state = 'published'`
+	query := `SELECT id, name, slug, "sortOrder", state, "publishedDate", brief, "apiDataBrief", COALESCE("leading", '') as leading, "heroImage", "heroUrl", "heroVideo", COALESCE(og_title, '') as og_title, COALESCE(og_description, '') as og_description, "og_image", COALESCE(type, 'list') as type, COALESCE(style, '') as style, "isFeatured", COALESCE("title_style", 'feature') as title_style, COALESCE(javascript, '') as javascript, COALESCE(dfp, '') as dfp, COALESCE("mobile_dfp", '') as mobile_dfp, "createdAt" FROM "Topic" WHERE id = $1 AND state = 'published'`
 
 	var t Topic
 	var dbID int
@@ -2200,7 +2212,13 @@ func (r *Repo) QueryTopicByID(ctx context.Context, id string) (*Topic, error) {
 	var pubAt, createdAt sql.NullTime
 	var brief, apiDataBrief sql.NullString
 	var heroImageID, heroVideoID, ogImageID sql.NullInt64
-	err = r.db.QueryRowContext(ctx, query, idInt).Scan(&dbID, &t.Name, &t.Slug, &sortOrder, &t.State, &pubAt, &brief, &apiDataBrief, &t.Leading, &heroImageID, &t.HeroUrl, &heroVideoID, &t.OgTitle, &t.OgDescription, &ogImageID, &t.Type, &t.Style, &t.IsFeatured, &t.TitleStyle, &t.Javascript, &t.Dfp, &t.MobileDfp, &createdAt)
+	var heroUrl sql.NullString
+	err = r.db.QueryRowContext(ctx, query, idInt).Scan(&dbID, &t.Name, &t.Slug, &sortOrder, &t.State, &pubAt, &brief, &apiDataBrief, &t.Leading, &heroImageID, &heroUrl, &heroVideoID, &t.OgTitle, &t.OgDescription, &ogImageID, &t.Type, &t.Style, &t.IsFeatured, &t.TitleStyle, &t.Javascript, &t.Dfp, &t.MobileDfp, &createdAt)
+	if heroUrl.Valid {
+		t.HeroUrl = heroUrl.String
+	} else {
+		t.HeroUrl = ""
+	}
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -2592,7 +2610,8 @@ func (r *Repo) QueryVideos(ctx context.Context, where *VideoWhereInput, orders [
 		var dbID int
 		var pubAt, createdAt sql.NullTime
 		var heroImageID sql.NullInt64
-		if err := rows.Scan(&dbID, &v.Name, &v.IsShorts, &v.YoutubeUrl, &v.FileDuration, &v.YoutubeDuration, &v.Content, &heroImageID, &v.Uploader, &v.UploaderEmail, &v.IsFeed, &v.VideoSection, &v.State, &pubAt, &v.PublishedDateString, &v.UpdateTimeStamp, &createdAt); err != nil {
+		var fileFilename sql.NullString
+		if err := rows.Scan(&dbID, &v.Name, &v.IsShorts, &v.YoutubeUrl, &v.FileDuration, &v.YoutubeDuration, &v.Content, &heroImageID, &v.Uploader, &v.UploaderEmail, &v.IsFeed, &v.VideoSection, &v.State, &pubAt, &v.PublishedDateString, &v.UpdateTimeStamp, &createdAt, &fileFilename); err != nil {
 			return nil, err
 		}
 		v.ID = strconv.Itoa(dbID)
@@ -2612,9 +2631,13 @@ func (r *Repo) QueryVideos(ctx context.Context, where *VideoWhereInput, orders [
 		if v.YoutubeDuration == "" || v.YoutubeDuration == "0" {
 			v.YoutubeDuration = "PT0S"
 		}
-		// 根據 schema.prisma，Video.videoSrc 是 virtual field，需要從 file 或 youtubeUrl 生成
-		// 這裡先設為空字串，後續可以在 resolver 中處理
-		v.VideoSrc = ""
+		// 根據 schema.prisma，Video.videoSrc 是 virtual field，需要從 file_filename 生成
+		// 格式：https://statics-dev.mirrordaily.news/video-files/{filename}
+		if fileFilename.Valid && fileFilename.String != "" {
+			v.VideoSrc = fmt.Sprintf("https://statics-dev.mirrordaily.news/video-files/%s", fileFilename.String)
+		} else {
+			v.VideoSrc = ""
+		}
 		if heroImageID.Valid {
 			heroImageIDs = append(heroImageIDs, int(heroImageID.Int64))
 			v.Metadata = map[string]any{"heroImageID": int(heroImageID.Int64)}
@@ -2711,13 +2734,14 @@ func (r *Repo) QueryVideoByID(ctx context.Context, id string) (*Video, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	query := `SELECT id, COALESCE(name, '') as name, "isShorts", COALESCE("youtubeUrl", '') as youtubeUrl, COALESCE("fileDuration", '') as fileDuration, COALESCE("youtubeDuration", '') as youtubeDuration, COALESCE(content, '') as content, "heroImage", COALESCE(uploader, '') as uploader, COALESCE("uploaderEmail", '') as uploaderEmail, "isFeed", COALESCE("videoSection", 'news') as videoSection, state, "publishedDate", COALESCE("publishedDateString", '') as publishedDateString, "updateTimeStamp", "createdAt" FROM "Video" WHERE id = $1 AND state = 'published'`
+	query := `SELECT id, COALESCE(name, '') as name, "isShorts", COALESCE("youtubeUrl", '') as youtubeUrl, COALESCE("fileDuration", '') as fileDuration, COALESCE("youtubeDuration", '') as youtubeDuration, COALESCE(content, '') as content, "heroImage", COALESCE(uploader, '') as uploader, COALESCE("uploaderEmail", '') as uploaderEmail, "isFeed", COALESCE("videoSection", 'news') as videoSection, state, "publishedDate", COALESCE("publishedDateString", '') as publishedDateString, "updateTimeStamp", "createdAt", "file_filename" FROM "Video" WHERE id = $1 AND state = 'published'`
 
 	var v Video
 	var dbID int
 	var pubAt, createdAt sql.NullTime
 	var heroImageID sql.NullInt64
-	err = r.db.QueryRowContext(ctx, query, idInt).Scan(&dbID, &v.Name, &v.IsShorts, &v.YoutubeUrl, &v.FileDuration, &v.YoutubeDuration, &v.Content, &heroImageID, &v.Uploader, &v.UploaderEmail, &v.IsFeed, &v.VideoSection, &v.State, &pubAt, &v.PublishedDateString, &v.UpdateTimeStamp, &createdAt)
+	var fileFilename sql.NullString
+	err = r.db.QueryRowContext(ctx, query, idInt).Scan(&dbID, &v.Name, &v.IsShorts, &v.YoutubeUrl, &v.FileDuration, &v.YoutubeDuration, &v.Content, &heroImageID, &v.Uploader, &v.UploaderEmail, &v.IsFeed, &v.VideoSection, &v.State, &pubAt, &v.PublishedDateString, &v.UpdateTimeStamp, &createdAt, &fileFilename)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -2741,7 +2765,13 @@ func (r *Repo) QueryVideoByID(ctx context.Context, id string) (*Video, error) {
 	if v.YoutubeDuration == "" || v.YoutubeDuration == "0" {
 		v.YoutubeDuration = "PT0S"
 	}
-	v.VideoSrc = ""
+	// 根據 schema.prisma，Video.videoSrc 是 virtual field，需要從 file_filename 生成
+	// 格式：https://statics-dev.mirrordaily.news/video-files/{filename}
+	if fileFilename.Valid && fileFilename.String != "" {
+		v.VideoSrc = fmt.Sprintf("https://statics-dev.mirrordaily.news/video-files/%s", fileFilename.String)
+	} else {
+		v.VideoSrc = ""
+	}
 	if heroImageID.Valid {
 		heroImageIDs := []int{int(heroImageID.Int64)}
 		v.Metadata = map[string]any{"heroImageID": int(heroImageID.Int64)}
