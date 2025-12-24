@@ -313,10 +313,12 @@ func Build(repo *data.Repo) (graphql.Schema, error) {
 	photoType := graphql.NewObject(graphql.ObjectConfig{
 		Name: "Photo",
 		Fields: graphql.Fields{
-			"id":          &graphql.Field{Type: graphql.ID},
-			"imageFile":   &graphql.Field{Type: imageFileType},
-			"resized":     &graphql.Field{Type: resizedType},
-			"resizedWebp": &graphql.Field{Type: resizedType},
+			"id":            &graphql.Field{Type: graphql.ID},
+			"name":          &graphql.Field{Type: graphql.String},
+			"topicKeywords": &graphql.Field{Type: graphql.String},
+			"imageFile":     &graphql.Field{Type: imageFileType},
+			"resized":       &graphql.Field{Type: resizedType},
+			"resizedWebp":   &graphql.Field{Type: resizedType},
 		},
 	})
 
@@ -325,21 +327,38 @@ func Build(repo *data.Repo) (graphql.Schema, error) {
 		Name: "Video",
 		Fields: graphql.FieldsThunk(func() graphql.Fields {
 			return graphql.Fields{
-				"id":                  &graphql.Field{Type: graphql.ID},
-				"name":                &graphql.Field{Type: graphql.String},
-				"isShorts":            &graphql.Field{Type: graphql.Boolean},
-				"youtubeUrl":          &graphql.Field{Type: graphql.String},
-				"fileDuration":        &graphql.Field{Type: graphql.String},
-				"youtubeDuration":     &graphql.Field{Type: graphql.String},
-				"videoSrc":            &graphql.Field{Type: graphql.String},
-				"content":             &graphql.Field{Type: graphql.String},
-				"heroImage":           &graphql.Field{Type: photoType},
-				"uploader":            &graphql.Field{Type: graphql.String},
-				"uploaderEmail":       &graphql.Field{Type: graphql.String},
-				"isFeed":              &graphql.Field{Type: graphql.Boolean},
-				"videoSection":        &graphql.Field{Type: graphql.String},
-				"state":               &graphql.Field{Type: graphql.String},
-				"publishedDate":       &graphql.Field{Type: dateTimeScalar},
+				"id":              &graphql.Field{Type: graphql.ID},
+				"name":            &graphql.Field{Type: graphql.String},
+				"isShorts":        &graphql.Field{Type: graphql.Boolean},
+				"youtubeUrl":      &graphql.Field{Type: graphql.String},
+				"fileDuration":    &graphql.Field{Type: graphql.String},
+				"youtubeDuration": &graphql.Field{Type: graphql.String},
+				"videoSrc":        &graphql.Field{Type: graphql.String},
+				"content":         &graphql.Field{Type: graphql.String},
+				"heroImage":       &graphql.Field{Type: photoType},
+				"uploader":        &graphql.Field{Type: graphql.String},
+				"uploaderEmail":   &graphql.Field{Type: graphql.String},
+				"isFeed":          &graphql.Field{Type: graphql.Boolean},
+				"videoSection":    &graphql.Field{Type: graphql.String},
+				"state":           &graphql.Field{Type: graphql.String},
+				"publishedDate": &graphql.Field{
+					Type: dateTimeScalar,
+					Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+						v, ok := p.Source.(data.Video)
+						if !ok {
+							if ptr, ok2 := p.Source.(*data.Video); ok2 && ptr != nil {
+								v = *ptr
+							} else {
+								return nil, nil
+							}
+						}
+						// 當 publishedDate 為空字串時，返回 nil 以匹配 target 的行為
+						if v.PublishedDate == "" {
+							return nil, nil
+						}
+						return v.PublishedDate, nil
+					},
+				},
 				"publishedDateString": &graphql.Field{Type: graphql.String},
 				"updateTimeStamp":     &graphql.Field{Type: graphql.Boolean},
 				"tags":                &graphql.Field{Type: graphql.NewList(tagType)},

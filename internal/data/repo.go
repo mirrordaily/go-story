@@ -30,11 +30,13 @@ type Resized struct {
 }
 
 type Photo struct {
-	ID          string         `json:"id"`
-	ImageFile   ImageFile      `json:"imageFile"`
-	Resized     Resized        `json:"resized"`
-	ResizedWebp Resized        `json:"resizedWebp"`
-	Metadata    map[string]any `json:"-"`
+	ID            string         `json:"id"`
+	Name          string         `json:"name"`
+	TopicKeywords string         `json:"topicKeywords"`
+	ImageFile     ImageFile      `json:"imageFile"`
+	Resized       Resized        `json:"resized"`
+	ResizedWebp   Resized        `json:"resizedWebp"`
+	Metadata      map[string]any `json:"-"`
 }
 
 type Section struct {
@@ -1681,24 +1683,28 @@ func (r *Repo) fetchImages(ctx context.Context, ids []int) (map[int]*Photo, erro
 	if len(ids) == 0 {
 		return result, nil
 	}
-	rows, err := r.db.QueryContext(ctx, `SELECT id, COALESCE("imageFile_id", ''), COALESCE("imageFile_extension", ''), "imageFile_width", "imageFile_height" FROM "Image" WHERE id = ANY($1)`, pqIntArray(ids))
+	rows, err := r.db.QueryContext(ctx, `SELECT id, COALESCE(name, '') as name, COALESCE("topicKeywords", '') as topicKeywords, COALESCE("imageFile_id", ''), COALESCE("imageFile_extension", ''), "imageFile_width", "imageFile_height" FROM "Image" WHERE id = ANY($1)`, pqIntArray(ids))
 	if err != nil {
 		return result, err
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var im struct {
-			id     int
-			fileID string
-			ext    string
-			width  sql.NullInt64
-			height sql.NullInt64
+			id            int
+			name          string
+			topicKeywords string
+			fileID        string
+			ext           string
+			width         sql.NullInt64
+			height        sql.NullInt64
 		}
-		if err := rows.Scan(&im.id, &im.fileID, &im.ext, &im.width, &im.height); err != nil {
+		if err := rows.Scan(&im.id, &im.name, &im.topicKeywords, &im.fileID, &im.ext, &im.width, &im.height); err != nil {
 			return result, err
 		}
 		photo := Photo{
-			ID: strconv.Itoa(im.id),
+			ID:            strconv.Itoa(im.id),
+			Name:          im.name,
+			TopicKeywords: im.topicKeywords,
 			ImageFile: ImageFile{
 				Width:  int(im.width.Int64),
 				Height: int(im.height.Int64),
@@ -1935,7 +1941,7 @@ func (r *Repo) QueryTopics(ctx context.Context, where *TopicWhereInput, orders [
 	where = ensureTopicPublished(where)
 
 	sb := strings.Builder{}
-	sb.WriteString(`SELECT id, name, slug, "sortOrder", state, "publishedDate", brief, "apiDataBrief", COALESCE(leading, '') as leading, "heroImage", COALESCE("heroUrl", '') as heroUrl, "heroVideo", COALESCE(og_title, '') as og_title, COALESCE(og_description, '') as og_description, "og_image", COALESCE(type, 'list') as type, COALESCE(style, '') as style, "isFeatured", COALESCE("title_style", 'feature') as title_style, COALESCE(javascript, '') as javascript, COALESCE(dfp, '') as dfp, COALESCE("mobile_dfp", '') as mobile_dfp, "createdAt" FROM "Topic" t`)
+	sb.WriteString(`SELECT id, name, slug, "sortOrder", state, "publishedDate", brief, "apiDataBrief", COALESCE("leading", '') as leading, "heroImage", COALESCE("heroUrl", '') as heroUrl, "heroVideo", COALESCE(og_title, '') as og_title, COALESCE(og_description, '') as og_description, "og_image", COALESCE(type, 'list') as type, COALESCE(style, '') as style, "isFeatured", COALESCE("title_style", 'feature') as title_style, COALESCE(javascript, '') as javascript, COALESCE(dfp, '') as dfp, COALESCE("mobile_dfp", '') as mobile_dfp, "createdAt" FROM "Topic" t`)
 
 	conds := []string{}
 	args := []interface{}{}
@@ -2121,7 +2127,7 @@ func (r *Repo) QueryTopicBySlug(ctx context.Context, slug string) (*Topic, error
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	query := `SELECT id, name, slug, "sortOrder", state, "publishedDate", brief, "apiDataBrief", COALESCE(leading, '') as leading, "heroImage", COALESCE("heroUrl", '') as heroUrl, "heroVideo", COALESCE(og_title, '') as og_title, COALESCE(og_description, '') as og_description, "og_image", COALESCE(type, 'list') as type, COALESCE(style, '') as style, "isFeatured", COALESCE("title_style", 'feature') as title_style, COALESCE(javascript, '') as javascript, COALESCE(dfp, '') as dfp, COALESCE("mobile_dfp", '') as mobile_dfp, "createdAt" FROM "Topic" WHERE slug = $1 AND state = 'published'`
+	query := `SELECT id, name, slug, "sortOrder", state, "publishedDate", brief, "apiDataBrief", COALESCE("leading", '') as leading, "heroImage", COALESCE("heroUrl", '') as heroUrl, "heroVideo", COALESCE(og_title, '') as og_title, COALESCE(og_description, '') as og_description, "og_image", COALESCE(type, 'list') as type, COALESCE(style, '') as style, "isFeatured", COALESCE("title_style", 'feature') as title_style, COALESCE(javascript, '') as javascript, COALESCE(dfp, '') as dfp, COALESCE("mobile_dfp", '') as mobile_dfp, "createdAt" FROM "Topic" WHERE slug = $1 AND state = 'published'`
 
 	var t Topic
 	var dbID int
@@ -2186,7 +2192,7 @@ func (r *Repo) QueryTopicByID(ctx context.Context, id string) (*Topic, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	query := `SELECT id, name, slug, "sortOrder", state, "publishedDate", brief, "apiDataBrief", COALESCE(leading, '') as leading, "heroImage", COALESCE("heroUrl", '') as heroUrl, "heroVideo", COALESCE(og_title, '') as og_title, COALESCE(og_description, '') as og_description, "og_image", COALESCE(type, 'list') as type, COALESCE(style, '') as style, "isFeatured", COALESCE("title_style", 'feature') as title_style, COALESCE(javascript, '') as javascript, COALESCE(dfp, '') as dfp, COALESCE("mobile_dfp", '') as mobile_dfp, "createdAt" FROM "Topic" WHERE id = $1 AND state = 'published'`
+	query := `SELECT id, name, slug, "sortOrder", state, "publishedDate", brief, "apiDataBrief", COALESCE("leading", '') as leading, "heroImage", COALESCE("heroUrl", '') as heroUrl, "heroVideo", COALESCE(og_title, '') as og_title, COALESCE(og_description, '') as og_description, "og_image", COALESCE(type, 'list') as type, COALESCE(style, '') as style, "isFeatured", COALESCE("title_style", 'feature') as title_style, COALESCE(javascript, '') as javascript, COALESCE(dfp, '') as dfp, COALESCE("mobile_dfp", '') as mobile_dfp, "createdAt" FROM "Topic" WHERE id = $1 AND state = 'published'`
 
 	var t Topic
 	var dbID int
@@ -2339,7 +2345,7 @@ func (r *Repo) fetchTopicSlideshowImages(ctx context.Context, topicIDs []int) (m
 	}
 	// 根據 schema.prisma，Topic.slideshow_images 是透過 _Topic_slideshow_images 表關聯
 	query := `
-		SELECT tsi."A" as topic_id, i.id, COALESCE(i."imageFile_id", ''), COALESCE(i."imageFile_extension", ''), i."imageFile_width", i."imageFile_height"
+		SELECT tsi."A" as topic_id, i.id, COALESCE(i.name, '') as name, COALESCE(i."topicKeywords", '') as topicKeywords, COALESCE(i."imageFile_id", ''), COALESCE(i."imageFile_extension", ''), i."imageFile_width", i."imageFile_height"
 		FROM "_Topic_slideshow_images" tsi
 		JOIN "Image" i ON i.id = tsi."B"
 		WHERE tsi."A" = ANY($1)
@@ -2354,23 +2360,26 @@ func (r *Repo) fetchTopicSlideshowImages(ctx context.Context, topicIDs []int) (m
 	imageMap := map[int]int{} // imageID -> topicID
 	for rows.Next() {
 		var topicID, imageID int
-		var fileID, ext string
+		var name, topicKeywords, fileID, ext string
 		var width, height sql.NullInt64
-		if err := rows.Scan(&topicID, &imageID, &fileID, &ext, &width, &height); err != nil {
+		if err := rows.Scan(&topicID, &imageID, &name, &topicKeywords, &fileID, &ext, &width, &height); err != nil {
 			return result, err
 		}
 		imageIDs = append(imageIDs, imageID)
 		imageMap[imageID] = topicID
-	}
-	if len(imageIDs) > 0 {
-		images, err := r.fetchImages(ctx, imageIDs)
-		if err == nil {
-			for imageID, topicID := range imageMap {
-				if img, ok := images[imageID]; ok {
-					result[topicID] = append(result[topicID], *img)
-				}
-			}
+		// 直接建立 Photo 物件，因為我們已經有所有需要的資料
+		photo := Photo{
+			ID:            strconv.Itoa(imageID),
+			Name:          name,
+			TopicKeywords: topicKeywords,
+			ImageFile: ImageFile{
+				Width:  int(width.Int64),
+				Height: int(height.Int64),
+			},
 		}
+		photo.Resized = r.buildResizedURLs(fileID, ext)
+		photo.ResizedWebp = r.buildResizedURLs(fileID, "webP")
+		result[topicID] = append(result[topicID], photo)
 	}
 	return result, rows.Err()
 }
@@ -2589,9 +2598,19 @@ func (r *Repo) QueryVideos(ctx context.Context, where *VideoWhereInput, orders [
 		v.ID = strconv.Itoa(dbID)
 		if pubAt.Valid {
 			v.PublishedDate = pubAt.Time.Format(timeLayoutMilli)
+		} else {
+			// 當 publishedDate 為 null 時，設為空字串以匹配 target 的 nil 行為
+			v.PublishedDate = ""
 		}
 		if createdAt.Valid {
 			v.CreatedAt = createdAt.Time.Format(timeLayoutMilli)
+		}
+		// fileDuration 和 youtubeDuration 如果為空字串或 "0"，轉換為 ISO 8601 duration 格式
+		if v.FileDuration == "" || v.FileDuration == "0" {
+			v.FileDuration = "PT0S"
+		}
+		if v.YoutubeDuration == "" || v.YoutubeDuration == "0" {
+			v.YoutubeDuration = "PT0S"
 		}
 		// 根據 schema.prisma，Video.videoSrc 是 virtual field，需要從 file 或 youtubeUrl 生成
 		// 這裡先設為空字串，後續可以在 resolver 中處理
@@ -2708,9 +2727,19 @@ func (r *Repo) QueryVideoByID(ctx context.Context, id string) (*Video, error) {
 	v.ID = strconv.Itoa(dbID)
 	if pubAt.Valid {
 		v.PublishedDate = pubAt.Time.Format(timeLayoutMilli)
+	} else {
+		// 當 publishedDate 為 null 時，設為空字串以匹配 target 的 nil 行為
+		v.PublishedDate = ""
 	}
 	if createdAt.Valid {
 		v.CreatedAt = createdAt.Time.Format(timeLayoutMilli)
+	}
+	// fileDuration 和 youtubeDuration 如果為空字串或 "0"，轉換為 ISO 8601 duration 格式
+	if v.FileDuration == "" || v.FileDuration == "0" {
+		v.FileDuration = "PT0S"
+	}
+	if v.YoutubeDuration == "" || v.YoutubeDuration == "0" {
+		v.YoutubeDuration = "PT0S"
 	}
 	v.VideoSrc = ""
 	if heroImageID.Valid {
