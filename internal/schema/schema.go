@@ -125,6 +125,79 @@ func Build(repo *data.Repo) (graphql.Schema, error) {
 	externalWhereInputFields["OR"] = &graphql.InputObjectFieldConfig{Type: graphql.NewList(graphql.NewNonNull(externalWhereInputType))}
 	externalWhereInputFields["NOT"] = &graphql.InputObjectFieldConfig{Type: externalWhereInputType}
 
+	// TopicWhereInput
+	topicWhereInputType := graphql.NewInputObject(graphql.InputObjectConfig{
+		Name: "TopicWhereInput",
+		Fields: graphql.InputObjectConfigFieldMap{
+			"state": &graphql.InputObjectFieldConfig{Type: stringFilterInput},
+		},
+	})
+
+	// TopicWhereUniqueInput
+	topicWhereUniqueInputType := graphql.NewInputObject(graphql.InputObjectConfig{
+		Name: "TopicWhereUniqueInput",
+		Fields: graphql.InputObjectConfigFieldMap{
+			"id":   &graphql.InputObjectFieldConfig{Type: graphql.ID},
+			"slug": &graphql.InputObjectFieldConfig{Type: graphql.String},
+			"name": &graphql.InputObjectFieldConfig{Type: graphql.String},
+		},
+	})
+
+	// TopicOrderByInput
+	topicOrderByInput := graphql.NewInputObject(graphql.InputObjectConfig{
+		Name: "TopicOrderByInput",
+		Fields: graphql.InputObjectConfigFieldMap{
+			"sortOrder":     &graphql.InputObjectFieldConfig{Type: graphql.String},
+			"id":            &graphql.InputObjectFieldConfig{Type: graphql.String},
+			"createdAt":     &graphql.InputObjectFieldConfig{Type: graphql.String},
+			"publishedDate": &graphql.InputObjectFieldConfig{Type: graphql.String},
+		},
+	})
+
+	// VideoWhereInput
+	videoWhereInputType := graphql.NewInputObject(graphql.InputObjectConfig{
+		Name: "VideoWhereInput",
+		Fields: graphql.InputObjectConfigFieldMap{
+			"state":        &graphql.InputObjectFieldConfig{Type: stringFilterInput},
+			"isShorts":     &graphql.InputObjectFieldConfig{Type: booleanFilterInput},
+			"videoSection": &graphql.InputObjectFieldConfig{Type: stringFilterInput},
+			"youtubeUrl":   &graphql.InputObjectFieldConfig{Type: stringFilterInput},
+			"tags": &graphql.InputObjectFieldConfig{Type: graphql.NewInputObject(graphql.InputObjectConfig{
+				Name: "TagManyRelationFilter",
+				Fields: graphql.InputObjectConfigFieldMap{
+					"some": &graphql.InputObjectFieldConfig{Type: graphql.NewInputObject(graphql.InputObjectConfig{
+						Name: "TagWhereInput",
+						Fields: graphql.InputObjectConfigFieldMap{
+							"id": &graphql.InputObjectFieldConfig{Type: graphql.NewInputObject(graphql.InputObjectConfig{
+								Name: "IDFilter",
+								Fields: graphql.InputObjectConfigFieldMap{
+									"equals": &graphql.InputObjectFieldConfig{Type: graphql.ID},
+								},
+							})},
+						},
+					})},
+				},
+			})},
+		},
+	})
+
+	// VideoWhereUniqueInput
+	videoWhereUniqueInputType := graphql.NewInputObject(graphql.InputObjectConfig{
+		Name: "VideoWhereUniqueInput",
+		Fields: graphql.InputObjectConfigFieldMap{
+			"id": &graphql.InputObjectFieldConfig{Type: graphql.ID},
+		},
+	})
+
+	// VideoOrderByInput
+	videoOrderByInput := graphql.NewInputObject(graphql.InputObjectConfig{
+		Name: "VideoOrderByInput",
+		Fields: graphql.InputObjectConfigFieldMap{
+			"publishedDate": &graphql.InputObjectFieldConfig{Type: graphql.String},
+			"id":            &graphql.InputObjectFieldConfig{Type: graphql.String},
+		},
+	})
+
 	orderDirectionEnum := graphql.NewEnum(graphql.EnumConfig{
 		Name: "OrderDirection",
 		Values: graphql.EnumValueConfigMap{
@@ -846,23 +919,10 @@ func Build(repo *data.Repo) (graphql.Schema, error) {
 			"topics": &graphql.Field{
 				Type: graphql.NewList(topicType),
 				Args: graphql.FieldConfigArgument{
-					"take": &graphql.ArgumentConfig{Type: graphql.Int},
-					"skip": &graphql.ArgumentConfig{Type: graphql.Int},
-					"orderBy": &graphql.ArgumentConfig{Type: graphql.NewList(graphql.NewInputObject(graphql.InputObjectConfig{
-						Name: "TopicOrderByInput",
-						Fields: graphql.InputObjectConfigFieldMap{
-							"sortOrder":     &graphql.InputObjectFieldConfig{Type: graphql.String},
-							"id":            &graphql.InputObjectFieldConfig{Type: graphql.String},
-							"createdAt":     &graphql.InputObjectFieldConfig{Type: graphql.String},
-							"publishedDate": &graphql.InputObjectFieldConfig{Type: graphql.String},
-						},
-					}))},
-					"where": &graphql.ArgumentConfig{Type: graphql.NewInputObject(graphql.InputObjectConfig{
-						Name: "TopicWhereInput",
-						Fields: graphql.InputObjectConfigFieldMap{
-							"state": &graphql.InputObjectFieldConfig{Type: stringFilterInput},
-						},
-					})},
+					"take":    &graphql.ArgumentConfig{Type: graphql.Int},
+					"skip":    &graphql.ArgumentConfig{Type: graphql.Int},
+					"orderBy": &graphql.ArgumentConfig{Type: graphql.NewList(topicOrderByInput)},
+					"where":   &graphql.ArgumentConfig{Type: topicWhereInputType},
 				},
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
 					where, err := data.DecodeTopicWhere(p.Args["where"])
@@ -885,12 +945,7 @@ func Build(repo *data.Repo) (graphql.Schema, error) {
 			"topicsCount": &graphql.Field{
 				Type: graphql.Int,
 				Args: graphql.FieldConfigArgument{
-					"where": &graphql.ArgumentConfig{Type: graphql.NewInputObject(graphql.InputObjectConfig{
-						Name: "TopicWhereInput",
-						Fields: graphql.InputObjectConfigFieldMap{
-							"state": &graphql.InputObjectFieldConfig{Type: stringFilterInput},
-						},
-					})},
+					"where": &graphql.ArgumentConfig{Type: topicWhereInputType},
 				},
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
 					where, err := data.DecodeTopicWhere(p.Args["where"])
@@ -903,14 +958,7 @@ func Build(repo *data.Repo) (graphql.Schema, error) {
 			"topic": &graphql.Field{
 				Type: topicType,
 				Args: graphql.FieldConfigArgument{
-					"where": &graphql.ArgumentConfig{Type: graphql.NewInputObject(graphql.InputObjectConfig{
-						Name: "TopicWhereUniqueInput",
-						Fields: graphql.InputObjectConfigFieldMap{
-							"id":   &graphql.InputObjectFieldConfig{Type: graphql.ID},
-							"slug": &graphql.InputObjectFieldConfig{Type: graphql.String},
-							"name": &graphql.InputObjectFieldConfig{Type: graphql.String},
-						},
-					})},
+					"where": &graphql.ArgumentConfig{Type: topicWhereUniqueInputType},
 				},
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
 					where, err := data.DecodeTopicWhereUnique(p.Args["where"])
@@ -923,40 +971,10 @@ func Build(repo *data.Repo) (graphql.Schema, error) {
 			"videos": &graphql.Field{
 				Type: graphql.NewList(videoType),
 				Args: graphql.FieldConfigArgument{
-					"take": &graphql.ArgumentConfig{Type: graphql.Int},
-					"skip": &graphql.ArgumentConfig{Type: graphql.Int},
-					"orderBy": &graphql.ArgumentConfig{Type: graphql.NewList(graphql.NewInputObject(graphql.InputObjectConfig{
-						Name: "VideoOrderByInput",
-						Fields: graphql.InputObjectConfigFieldMap{
-							"publishedDate": &graphql.InputObjectFieldConfig{Type: graphql.String},
-							"id":            &graphql.InputObjectFieldConfig{Type: graphql.String},
-						},
-					}))},
-					"where": &graphql.ArgumentConfig{Type: graphql.NewInputObject(graphql.InputObjectConfig{
-						Name: "VideoWhereInput",
-						Fields: graphql.InputObjectConfigFieldMap{
-							"state":        &graphql.InputObjectFieldConfig{Type: stringFilterInput},
-							"isShorts":     &graphql.InputObjectFieldConfig{Type: booleanFilterInput},
-							"videoSection": &graphql.InputObjectFieldConfig{Type: stringFilterInput},
-							"youtubeUrl":   &graphql.InputObjectFieldConfig{Type: stringFilterInput},
-							"tags": &graphql.InputObjectFieldConfig{Type: graphql.NewInputObject(graphql.InputObjectConfig{
-								Name: "TagManyRelationFilter",
-								Fields: graphql.InputObjectConfigFieldMap{
-									"some": &graphql.InputObjectFieldConfig{Type: graphql.NewInputObject(graphql.InputObjectConfig{
-										Name: "TagWhereInput",
-										Fields: graphql.InputObjectConfigFieldMap{
-											"id": &graphql.InputObjectFieldConfig{Type: graphql.NewInputObject(graphql.InputObjectConfig{
-												Name: "IDFilter",
-												Fields: graphql.InputObjectConfigFieldMap{
-													"equals": &graphql.InputObjectFieldConfig{Type: graphql.ID},
-												},
-											})},
-										},
-									})},
-								},
-							})},
-						},
-					})},
+					"take":    &graphql.ArgumentConfig{Type: graphql.Int},
+					"skip":    &graphql.ArgumentConfig{Type: graphql.Int},
+					"orderBy": &graphql.ArgumentConfig{Type: graphql.NewList(videoOrderByInput)},
+					"where":   &graphql.ArgumentConfig{Type: videoWhereInputType},
 				},
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
 					where, err := data.DecodeVideoWhere(p.Args["where"])
@@ -979,31 +997,7 @@ func Build(repo *data.Repo) (graphql.Schema, error) {
 			"videosCount": &graphql.Field{
 				Type: graphql.Int,
 				Args: graphql.FieldConfigArgument{
-					"where": &graphql.ArgumentConfig{Type: graphql.NewInputObject(graphql.InputObjectConfig{
-						Name: "VideoWhereInput",
-						Fields: graphql.InputObjectConfigFieldMap{
-							"state":        &graphql.InputObjectFieldConfig{Type: stringFilterInput},
-							"isShorts":     &graphql.InputObjectFieldConfig{Type: booleanFilterInput},
-							"videoSection": &graphql.InputObjectFieldConfig{Type: stringFilterInput},
-							"youtubeUrl":   &graphql.InputObjectFieldConfig{Type: stringFilterInput},
-							"tags": &graphql.InputObjectFieldConfig{Type: graphql.NewInputObject(graphql.InputObjectConfig{
-								Name: "TagManyRelationFilter",
-								Fields: graphql.InputObjectConfigFieldMap{
-									"some": &graphql.InputObjectFieldConfig{Type: graphql.NewInputObject(graphql.InputObjectConfig{
-										Name: "TagWhereInput",
-										Fields: graphql.InputObjectConfigFieldMap{
-											"id": &graphql.InputObjectFieldConfig{Type: graphql.NewInputObject(graphql.InputObjectConfig{
-												Name: "IDFilter",
-												Fields: graphql.InputObjectConfigFieldMap{
-													"equals": &graphql.InputObjectFieldConfig{Type: graphql.ID},
-												},
-											})},
-										},
-									})},
-								},
-							})},
-						},
-					})},
+					"where": &graphql.ArgumentConfig{Type: videoWhereInputType},
 				},
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
 					where, err := data.DecodeVideoWhere(p.Args["where"])
@@ -1016,12 +1010,7 @@ func Build(repo *data.Repo) (graphql.Schema, error) {
 			"video": &graphql.Field{
 				Type: videoType,
 				Args: graphql.FieldConfigArgument{
-					"where": &graphql.ArgumentConfig{Type: graphql.NewInputObject(graphql.InputObjectConfig{
-						Name: "VideoWhereUniqueInput",
-						Fields: graphql.InputObjectConfigFieldMap{
-							"id": &graphql.InputObjectFieldConfig{Type: graphql.ID},
-						},
-					})},
+					"where": &graphql.ArgumentConfig{Type: videoWhereUniqueInputType},
 				},
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
 					where, err := data.DecodeVideoWhereUnique(p.Args["where"])

@@ -386,11 +386,234 @@ query GetExternalsByPartnerSlug(
     @include(if: $withAmount)
 }`
 
-	// probeSampleVars 會對 target GraphQL 發出簡單查詢，取得一組可用的 post / external / partner 參考值
+	const topicGQL = `query GetTopicBasicInfo($slug: String!) {
+  topic(where: { slug: $slug }) {
+    id
+    name
+    slug
+    sortOrder
+    state
+    publishedDate
+    brief
+    apiDataBrief
+    og_title
+    og_description
+    leading
+    type
+    style
+    heroUrl
+    heroImage {
+      id
+      imageFile {
+        width
+        height
+      }
+      resized {
+        original
+        w480
+        w800
+        w1200
+        w1600
+        w2400
+      }
+      resizedWebp {
+        original
+        w480
+        w800
+        w1200
+        w1600
+        w2400
+      }
+    }
+    heroVideo {
+      id
+      state
+      videoSrc
+      heroImage {
+        id
+        imageFile {
+          width
+          height
+        }
+        resized {
+          original
+          w480
+          w800
+          w1200
+          w1600
+          w2400
+        }
+      }
+    }
+    og_image {
+      id
+      imageFile {
+        width
+        height
+      }
+      resized {
+        original
+        w480
+        w800
+        w1200
+        w1600
+        w2400
+      }
+      resizedWebp {
+        original
+        w480
+        w800
+        w1200
+        w1600
+        w2400
+      }
+    }
+    slideshow_images {
+      id
+      name
+      topicKeywords
+      imageFile {
+        width
+        height
+      }
+      resized {
+        original
+        w480
+        w800
+        w1200
+        w1600
+        w2400
+      }
+      resizedWebp {
+        original
+        w480
+        w800
+        w1200
+        w1600
+        w2400
+      }
+    }
+    manualOrderOfSlideshowImages
+    tags {
+      id
+      name
+      slug
+    }
+    posts(take: 6, where: { state: { equals: "published" } }, orderBy: [{ publishedDate: desc }]) {
+      id
+      slug
+      title
+      publishedDate
+      heroImage {
+        id
+        imageFile {
+          width
+          height
+        }
+        resized {
+          original
+          w480
+          w800
+          w1200
+          w1600
+          w2400
+        }
+      }
+    }
+    postsCount(where: { state: { equals: "published" } })
+    sections {
+      id
+      name
+      slug
+      state
+      color
+    }
+    isFeatured
+    title_style
+    javascript
+    dfp
+    mobile_dfp
+    createdAt
+  }
+}`
+
+	const videoGQL = `query GetShortsData($id: ID!) {
+  video(where: { id: $id }) {
+    id
+    name
+    isShorts
+    youtubeUrl
+    fileDuration
+    youtubeDuration
+    videoSrc
+    content
+    heroImage {
+      id
+      imageFile {
+        width
+        height
+      }
+      resized {
+        original
+        w480
+        w800
+        w1200
+        w1600
+        w2400
+      }
+      resizedWebp {
+        original
+        w480
+        w800
+        w1200
+        w1600
+        w2400
+      }
+    }
+    uploader
+    uploaderEmail
+    isFeed
+    videoSection
+    state
+    publishedDate
+    publishedDateString
+    updateTimeStamp
+    tags {
+      id
+      name
+      slug
+    }
+    related_posts {
+      id
+      slug
+      title
+      heroImage {
+        id
+        imageFile {
+          width
+          height
+        }
+        resized {
+          original
+          w480
+          w800
+          w1200
+          w1600
+          w2400
+        }
+      }
+    }
+    createdAt
+  }
+}`
+
+	// probeSampleVars 會對 target GraphQL 發出簡單查詢，取得一組可用的 post / external / partner / topic / video 參考值
 	// 若失敗則回傳空字串，後續測試會用空變數，讓差異顯示在比對結果中。
 	samples := probeSampleVars(client, target)
 	postID := samples["postID"]
 	externalID := samples["externalID"]
+	topicSlug := samples["topicSlug"]
+	videoID := samples["videoID"]
 
 	// 將 ID 轉換為整數（target 需要整數格式）
 	// 如果轉換失敗，使用原始字串（讓錯誤顯示在比對結果中）
@@ -401,6 +624,10 @@ query GetExternalsByPartnerSlug(
 	var externalIDInt interface{} = externalID
 	if id, err := strconv.Atoi(externalID); err == nil {
 		externalIDInt = id
+	}
+	var videoIDInt interface{} = videoID
+	if id, err := strconv.Atoi(videoID); err == nil {
+		videoIDInt = id
 	}
 
 	tests := []struct {
@@ -466,6 +693,64 @@ query GetExternalsByPartnerSlug(
 				"operationName": "GetExternalById",
 				"variables": map[string]any{
 					"id": externalIDInt,
+				},
+			},
+		},
+		{
+			name: "topics_list",
+			body: map[string]any{
+				"query": `query ($take:Int,$skip:Int,$orderBy:[TopicOrderByInput!]!,$filter:TopicWhereInput!){
+					topicsCount(where:$filter)
+					topics(take:$take,skip:$skip,orderBy:$orderBy,where:$filter){
+						id name slug sortOrder state publishedDate heroImage{ id imageFile{ width height } resized{ original w480 w800 w1200 w1600 w2400 } resizedWebp{ original w480 w800 w1200 w1600 w2400 } }
+					}
+				}`,
+				"variables": map[string]any{
+					"take":    3,
+					"skip":    0,
+					"orderBy": []map[string]string{{"sortOrder": "asc"}, {"id": "desc"}},
+					"filter": map[string]any{
+						"state": map[string]any{"equals": "published"},
+					},
+				},
+			},
+		},
+		{
+			name: "topic_gql_GetTopicBasicInfo",
+			body: map[string]any{
+				"query":         topicGQL,
+				"operationName": "GetTopicBasicInfo",
+				"variables": map[string]any{
+					"slug": topicSlug,
+				},
+			},
+		},
+		{
+			name: "videos_list",
+			body: map[string]any{
+				"query": `query ($take:Int,$skip:Int,$orderBy:[VideoOrderByInput!]!,$filter:VideoWhereInput!){
+					videosCount(where:$filter)
+					videos(take:$take,skip:$skip,orderBy:$orderBy,where:$filter){
+						id name isShorts youtubeUrl fileDuration youtubeDuration videoSrc content heroImage{ id imageFile{ width height } resized{ original w480 w800 w1200 w1600 w2400 } resizedWebp{ original w480 w800 w1200 w1600 w2400 } } videoSection state publishedDate publishedDateString updateTimeStamp tags{ id name slug }
+					}
+				}`,
+				"variables": map[string]any{
+					"take":    3,
+					"skip":    0,
+					"orderBy": []map[string]string{{"publishedDate": "desc"}},
+					"filter": map[string]any{
+						"state": map[string]any{"equals": "published"},
+					},
+				},
+			},
+		},
+		{
+			name: "video_gql_GetShortsData",
+			body: map[string]any{
+				"query":         videoGQL,
+				"operationName": "GetShortsData",
+				"variables": map[string]any{
+					"id": videoIDInt,
 				},
 			},
 		},
@@ -827,6 +1112,80 @@ func probeSampleVars(client *http.Client, target string) map[string]string {
 							if exts[0].Partner != nil {
 								out["partnerSlug"] = exts[0].Partner.Slug
 							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// 3) 抓一個 topic（已發佈）
+	topicReqBody := gqlPayload{
+		Query: `query ($take:Int,$skip:Int,$orderBy:[TopicOrderByInput!]!,$filter:TopicWhereInput!){
+  topics(take:$take,skip:$skip,orderBy:$orderBy,where:$filter){
+    slug
+  }
+}`,
+		Variables: map[string]interface{}{
+			"take":    1,
+			"skip":    0,
+			"orderBy": []map[string]string{{"sortOrder": "asc"}},
+			"filter": map[string]interface{}{
+				"state": map[string]interface{}{"equals": "published"},
+			},
+		},
+	}
+	if b, err := json.Marshal(topicReqBody); err == nil {
+		if req, err := http.NewRequest(http.MethodPost, target, bytes.NewReader(b)); err == nil {
+			req.Header.Set("Content-Type", "application/json")
+			if resp, err := client.Do(req); err == nil {
+				body, _ := io.ReadAll(resp.Body)
+				resp.Body.Close()
+				var gr gqlResponse
+				if err := json.Unmarshal(body, &gr); err == nil && gr.Data != nil {
+					if rawTopics, ok := gr.Data["topics"]; ok {
+						var topics []struct {
+							Slug string `json:"slug"`
+						}
+						if err := json.Unmarshal(rawTopics, &topics); err == nil && len(topics) > 0 {
+							out["topicSlug"] = topics[0].Slug
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// 4) 抓一個 video（已發佈）
+	videoReqBody := gqlPayload{
+		Query: `query ($take:Int,$skip:Int,$orderBy:[VideoOrderByInput!]!,$filter:VideoWhereInput!){
+  videos(take:$take,skip:$skip,orderBy:$orderBy,where:$filter){
+    id
+  }
+}`,
+		Variables: map[string]interface{}{
+			"take":    1,
+			"skip":    0,
+			"orderBy": []map[string]string{{"publishedDate": "desc"}},
+			"filter": map[string]interface{}{
+				"state": map[string]interface{}{"equals": "published"},
+			},
+		},
+	}
+	if b, err := json.Marshal(videoReqBody); err == nil {
+		if req, err := http.NewRequest(http.MethodPost, target, bytes.NewReader(b)); err == nil {
+			req.Header.Set("Content-Type", "application/json")
+			if resp, err := client.Do(req); err == nil {
+				body, _ := io.ReadAll(resp.Body)
+				resp.Body.Close()
+				var gr gqlResponse
+				if err := json.Unmarshal(body, &gr); err == nil && gr.Data != nil {
+					if rawVideos, ok := gr.Data["videos"]; ok {
+						var videos []struct {
+							ID string `json:"id"`
+						}
+						if err := json.Unmarshal(rawVideos, &videos); err == nil && len(videos) > 0 {
+							out["videoID"] = videos[0].ID
 						}
 					}
 				}
