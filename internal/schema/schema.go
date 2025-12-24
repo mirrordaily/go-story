@@ -232,6 +232,19 @@ func Build(repo *data.Repo) (graphql.Schema, error) {
 		},
 	})
 
+	// 輔助函數：根據圖片寬度過濾 resized URLs
+	// 根據 probe 結果，w1200 總是返回空字串，w2400 根據圖片寬度決定
+	filterResizedByWidth := func(resized data.Resized, width int, isWebp bool) data.Resized {
+		result := resized
+		// w1200 總是返回空字串
+		result.W1200 = ""
+		// w2400 如果圖片寬度小於 2400，返回空字串
+		if width < 2400 {
+			result.W2400 = ""
+		}
+		return result
+	}
+
 	resizedType := graphql.NewObject(graphql.ObjectConfig{
 		Name: "Resized",
 		Fields: graphql.Fields{
@@ -310,8 +323,42 @@ func Build(repo *data.Repo) (graphql.Schema, error) {
 			"name":          &graphql.Field{Type: graphql.String},
 			"topicKeywords": &graphql.Field{Type: graphql.String},
 			"imageFile":     &graphql.Field{Type: imageFileType},
-			"resized":       &graphql.Field{Type: resizedType},
-			"resizedWebp":   &graphql.Field{Type: resizedType},
+			"resized": &graphql.Field{
+				Type: resizedType,
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					photo, ok := p.Source.(*data.Photo)
+					if !ok {
+						if p2, ok2 := p.Source.(data.Photo); ok2 {
+							photo = &p2
+						} else {
+							return data.Resized{}, nil
+						}
+					}
+					if photo == nil {
+						return data.Resized{}, nil
+					}
+					// 根據圖片寬度過濾 resized URLs
+					return filterResizedByWidth(photo.Resized, photo.ImageFile.Width, false), nil
+				},
+			},
+			"resizedWebp": &graphql.Field{
+				Type: resizedType,
+				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+					photo, ok := p.Source.(*data.Photo)
+					if !ok {
+						if p2, ok2 := p.Source.(data.Photo); ok2 {
+							photo = &p2
+						} else {
+							return data.Resized{}, nil
+						}
+					}
+					if photo == nil {
+						return data.Resized{}, nil
+					}
+					// 根據圖片寬度過濾 resizedWebp URLs
+					return filterResizedByWidth(photo.ResizedWebp, photo.ImageFile.Width, true), nil
+				},
+			},
 		},
 	})
 
