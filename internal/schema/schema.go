@@ -232,18 +232,18 @@ func Build(repo *data.Repo) (graphql.Schema, error) {
 		},
 	})
 
-	// 輔助函數：根據圖片寬度和是否為 webp 過濾 resized URLs
-	// 根據 probe 結果：
-	// - resized.w1200 總是返回空字串
-	// - resized.w2400 和 resizedWebp.w2400 根據圖片寬度決定（寬度 < 2400 時返回空字串）
-	filterResizedByWidth := func(resized data.Resized, width int, isWebp bool) data.Resized {
+	// 輔助函數：根據圖片寬高比過濾 resized URLs
+	// 根據 Image.ts 的邏輯：
+	// - 橫向圖片（width >= height）：生成 w480, w800, w1600, w2400（w1200 為空）
+	// - 縱向圖片（width < height）：生成 w480, w800, w1200, w1600（w2400 為空）
+	filterResizedByAspectRatio := func(resized data.Resized, width, height int) data.Resized {
 		result := resized
-		// resized.w1200 總是返回空字串（但 resizedWebp.w1200 有值）
-		if !isWebp {
+		// 根據寬高比決定哪些尺寸應該為空
+		if width >= height {
+			// 橫向圖片：w1200 為空
 			result.W1200 = ""
-		}
-		// w2400 如果圖片寬度小於 2400，返回空字串
-		if width < 2400 {
+		} else {
+			// 縱向圖片：w2400 為空
 			result.W2400 = ""
 		}
 		return result
@@ -341,10 +341,10 @@ func Build(repo *data.Repo) (graphql.Schema, error) {
 					if photo == nil {
 						return data.Resized{}, nil
 					}
-					// resized 是 virtual field，根據圖片寬度過濾 URLs
-					// resized.w1200 總是返回空字串
-					// resized.w2400 根據圖片寬度決定
-					return filterResizedByWidth(photo.Resized, photo.ImageFile.Width, false), nil
+					// resized 是 virtual field，根據圖片寬高比過濾 URLs
+					// 橫向圖片（width >= height）：w1200 為空
+					// 縱向圖片（width < height）：w2400 為空
+					return filterResizedByAspectRatio(photo.Resized, photo.ImageFile.Width, photo.ImageFile.Height), nil
 				},
 			},
 			"resizedWebp": &graphql.Field{
@@ -361,10 +361,10 @@ func Build(repo *data.Repo) (graphql.Schema, error) {
 					if photo == nil {
 						return data.Resized{}, nil
 					}
-					// resizedWebp 是 virtual field，根據圖片寬度過濾 URLs
-					// resizedWebp.w1200 有值（不過濾）
-					// resizedWebp.w2400 根據圖片寬度決定
-					return filterResizedByWidth(photo.ResizedWebp, photo.ImageFile.Width, true), nil
+					// resizedWebp 是 virtual field，根據圖片寬高比過濾 URLs
+					// 橫向圖片（width >= height）：w1200 為空
+					// 縱向圖片（width < height）：w2400 為空
+					return filterResizedByAspectRatio(photo.ResizedWebp, photo.ImageFile.Width, photo.ImageFile.Height), nil
 				},
 			},
 		},
