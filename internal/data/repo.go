@@ -176,6 +176,7 @@ type Post struct {
 	RelatedsInInputOrder []Post         `json:"relatedsInInputOrder"`
 	RelatedsOne          *Post          `json:"relatedsOne"`
 	RelatedsTwo          *Post          `json:"relatedsTwo"`
+	RelatedsThree        *Post          `json:"relatedsThree"`
 	Redirect             string         `json:"redirect"`
 	OgTitle              string         `json:"og_title"`
 	OgImage              *Photo         `json:"og_image"`
@@ -462,7 +463,7 @@ func (r *Repo) QueryPosts(ctx context.Context, where *PostWhereInput, orders []O
 	}
 
 	sb := strings.Builder{}
-	sb.WriteString(`SELECT id, slug, title, subtitle, state, style, "isMember", "isAdult", "publishedDate", "updatedAt", COALESCE("heroCaption",'') as heroCaption, COALESCE("extend_byline",'') as extend_byline, "heroImage", "heroVideo", brief, "apiDataBrief", "apiData", content, COALESCE(redirect,'') as redirect, COALESCE(og_title,'') as og_title, COALESCE(og_description,'') as og_description, "hiddenAdvertised", "isAdvertised", "isFeatured", topics, "og_image", "relatedsOne", "relatedsTwo" FROM "Post" p`)
+	sb.WriteString(`SELECT id, slug, title, subtitle, state, style, "isMember", "isAdult", "publishedDate", "updatedAt", COALESCE("heroCaption",'') as heroCaption, COALESCE("extend_byline",'') as extend_byline, "heroImage", "heroVideo", brief, "apiDataBrief", "apiData", content, COALESCE(redirect,'') as redirect, COALESCE(og_title,'') as og_title, COALESCE(og_description,'') as og_description, "hiddenAdvertised", "isAdvertised", "isFeatured", topics, "og_image", "relatedsOne", "relatedsTwo", "relatedsThree" FROM "Post" p`)
 
 	conds := []string{}
 	args := []interface{}{}
@@ -563,20 +564,21 @@ func (r *Repo) QueryPosts(ctx context.Context, where *PostWhereInput, orders []O
 	posts := []Post{}
 	for rows.Next() {
 		var (
-			p             Post
-			dbID          int
-			publishedAt   sql.NullTime
-			updatedAt     sql.NullTime
-			heroImageID   sql.NullInt64
-			heroVideoID   sql.NullInt64
-			ogImageID     sql.NullInt64
-			topicsID      sql.NullInt64
-			relatedsOneID sql.NullInt64
-			relatedsTwoID sql.NullInt64
-			briefRaw      []byte
-			apiDataBrief  []byte
-			apiData       []byte
-			contentRaw    []byte
+			p               Post
+			dbID            int
+			publishedAt     sql.NullTime
+			updatedAt       sql.NullTime
+			heroImageID     sql.NullInt64
+			heroVideoID     sql.NullInt64
+			ogImageID       sql.NullInt64
+			topicsID        sql.NullInt64
+			relatedsOneID   sql.NullInt64
+			relatedsTwoID   sql.NullInt64
+			relatedsThreeID sql.NullInt64
+			briefRaw        []byte
+			apiDataBrief    []byte
+			apiData         []byte
+			contentRaw      []byte
 		)
 		if err := rows.Scan(
 			&dbID,
@@ -607,6 +609,7 @@ func (r *Repo) QueryPosts(ctx context.Context, where *PostWhereInput, orders []O
 			&ogImageID,
 			&relatedsOneID,
 			&relatedsTwoID,
+			&relatedsThreeID,
 		); err != nil {
 			return nil, err
 		}
@@ -623,12 +626,13 @@ func (r *Repo) QueryPosts(ctx context.Context, where *PostWhereInput, orders []O
 		p.Content = decodeJSONBytes(contentRaw)
 		p.TrimmedContent = p.Content
 		p.Metadata = map[string]any{
-			"heroImageID":   nullableInt(heroImageID),
-			"ogImageID":     nullableInt(ogImageID),
-			"heroVideoID":   nullableInt(heroVideoID),
-			"topicsID":      nullableInt(topicsID),
-			"relatedsOneID": nullableInt(relatedsOneID),
-			"relatedsTwoID": nullableInt(relatedsTwoID),
+			"heroImageID":     nullableInt(heroImageID),
+			"ogImageID":       nullableInt(ogImageID),
+			"heroVideoID":     nullableInt(heroVideoID),
+			"topicsID":        nullableInt(topicsID),
+			"relatedsOneID":   nullableInt(relatedsOneID),
+			"relatedsTwoID":   nullableInt(relatedsTwoID),
+			"relatedsThreeID": nullableInt(relatedsThreeID),
 		}
 		posts = append(posts, p)
 	}
@@ -758,7 +762,7 @@ func (r *Repo) QueryPostByUnique(ctx context.Context, where *PostWhereUniqueInpu
 	}
 
 	sb := strings.Builder{}
-	sb.WriteString(`SELECT id, slug, title, subtitle, state, style, "isMember", "isAdult", "publishedDate", "updatedAt", COALESCE("heroCaption",'') as heroCaption, COALESCE("extend_byline",'') as extend_byline, "heroImage", "heroVideo", brief, "apiDataBrief", "apiData", content, COALESCE(redirect,'') as redirect, COALESCE(og_title,'') as og_title, COALESCE(og_description,'') as og_description, "hiddenAdvertised", "isAdvertised", "isFeatured", topics, "og_image", "relatedsOne", "relatedsTwo" FROM "Post" p WHERE `)
+	sb.WriteString(`SELECT id, slug, title, subtitle, state, style, "isMember", "isAdult", "publishedDate", "updatedAt", COALESCE("heroCaption",'') as heroCaption, COALESCE("extend_byline",'') as extend_byline, "heroImage", "heroVideo", brief, "apiDataBrief", "apiData", content, COALESCE(redirect,'') as redirect, COALESCE(og_title,'') as og_title, COALESCE(og_description,'') as og_description, "hiddenAdvertised", "isAdvertised", "isFeatured", topics, "og_image", "relatedsOne", "relatedsTwo", "relatedsThree" FROM "Post" p WHERE `)
 	args := []interface{}{}
 	argIdx := 1
 	if where.ID != nil {
@@ -775,20 +779,21 @@ func (r *Repo) QueryPostByUnique(ctx context.Context, where *PostWhereUniqueInpu
 	sb.WriteString(" LIMIT 1")
 
 	var (
-		p             Post
-		dbID          int
-		publishedAt   sql.NullTime
-		updatedAt     sql.NullTime
-		heroImageID   sql.NullInt64
-		heroVideoID   sql.NullInt64
-		ogImageID     sql.NullInt64
-		topicsID      sql.NullInt64
-		relatedsOneID sql.NullInt64
-		relatedsTwoID sql.NullInt64
-		briefRaw      []byte
-		apiDataBrief  []byte
-		apiData       []byte
-		contentRaw    []byte
+		p               Post
+		dbID            int
+		publishedAt     sql.NullTime
+		updatedAt       sql.NullTime
+		heroImageID     sql.NullInt64
+		heroVideoID     sql.NullInt64
+		ogImageID       sql.NullInt64
+		topicsID        sql.NullInt64
+		relatedsOneID   sql.NullInt64
+		relatedsTwoID   sql.NullInt64
+		relatedsThreeID sql.NullInt64
+		briefRaw        []byte
+		apiDataBrief    []byte
+		apiData         []byte
+		contentRaw      []byte
 	)
 
 	err := r.db.QueryRowContext(ctx, sb.String(), args...).Scan(
@@ -820,6 +825,7 @@ func (r *Repo) QueryPostByUnique(ctx context.Context, where *PostWhereUniqueInpu
 		&ogImageID,
 		&relatedsOneID,
 		&relatedsTwoID,
+		&relatedsThreeID,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -840,12 +846,13 @@ func (r *Repo) QueryPostByUnique(ctx context.Context, where *PostWhereUniqueInpu
 	p.Content = decodeJSONBytes(contentRaw)
 	p.TrimmedContent = p.Content
 	p.Metadata = map[string]any{
-		"heroImageID":   nullableInt(heroImageID),
-		"ogImageID":     nullableInt(ogImageID),
-		"heroVideoID":   nullableInt(heroVideoID),
-		"topicsID":      nullableInt(topicsID),
-		"relatedsOneID": nullableInt(relatedsOneID),
-		"relatedsTwoID": nullableInt(relatedsTwoID),
+		"heroImageID":     nullableInt(heroImageID),
+		"ogImageID":       nullableInt(ogImageID),
+		"heroVideoID":     nullableInt(heroVideoID),
+		"topicsID":        nullableInt(topicsID),
+		"relatedsOneID":   nullableInt(relatedsOneID),
+		"relatedsTwoID":   nullableInt(relatedsTwoID),
+		"relatedsThreeID": nullableInt(relatedsThreeID),
 	}
 	posts := []Post{p}
 	if err := r.enrichPosts(ctx, posts); err != nil {
@@ -1339,6 +1346,7 @@ func (r *Repo) enrichPosts(ctx context.Context, posts []Post) error {
 
 	relatedOneIDs := []int{}
 	relatedTwoIDs := []int{}
+	relatedThreeIDs := []int{}
 	for _, p := range posts {
 		if id := getMetaInt(p.Metadata, "relatedsOneID"); id > 0 {
 			relatedOneIDs = append(relatedOneIDs, id)
@@ -1346,8 +1354,11 @@ func (r *Repo) enrichPosts(ctx context.Context, posts []Post) error {
 		if id := getMetaInt(p.Metadata, "relatedsTwoID"); id > 0 {
 			relatedTwoIDs = append(relatedTwoIDs, id)
 		}
+		if id := getMetaInt(p.Metadata, "relatedsThreeID"); id > 0 {
+			relatedThreeIDs = append(relatedThreeIDs, id)
+		}
 	}
-	relatedSinglesIDs := append(relatedOneIDs, relatedTwoIDs...)
+	relatedSinglesIDs := append(append(relatedOneIDs, relatedTwoIDs...), relatedThreeIDs...)
 	relatedSinglePosts := map[int]Post{}
 	if len(relatedSinglesIDs) > 0 {
 		sps, imgIDs, err := r.fetchPostsByIDs(ctx, relatedSinglesIDs)
@@ -1430,6 +1441,11 @@ func (r *Repo) enrichPosts(ctx context.Context, posts []Post) error {
 		if r2 := getMetaInt(p.Metadata, "relatedsTwoID"); r2 > 0 {
 			if rp, ok := relatedSinglePosts[r2]; ok {
 				p.RelatedsTwo = &rp
+			}
+		}
+		if r3 := getMetaInt(p.Metadata, "relatedsThreeID"); r3 > 0 {
+			if rp, ok := relatedSinglePosts[r3]; ok {
+				p.RelatedsThree = &rp
 			}
 		}
 	}

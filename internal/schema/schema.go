@@ -719,6 +719,12 @@ func Build(repo *data.Repo) (graphql.Schema, error) {
 						return normalizePost(p.Source).RelatedsTwo, nil
 					},
 				},
+				"relatedsThree": &graphql.Field{
+					Type: postType,
+					Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+						return normalizePost(p.Source).RelatedsThree, nil
+					},
+				},
 				"redirect": &graphql.Field{
 					Type: graphql.String,
 					Resolve: func(p graphql.ResolveParams) (interface{}, error) {
