@@ -781,7 +781,8 @@ func (r *Repo) QueryPostByUnique(ctx context.Context, where *PostWhereUniqueInpu
 	} else {
 		return nil, nil
 	}
-	sb.WriteString(" LIMIT 1")
+	// 單篇查詢也要排除 draft / archived / scheduled
+	sb.WriteString(" AND p.state NOT IN ('draft','archived','scheduled') LIMIT 1")
 
 	var (
 		p               Post
