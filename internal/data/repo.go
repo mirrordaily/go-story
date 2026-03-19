@@ -535,6 +535,8 @@ func (r *Repo) QueryPosts(ctx context.Context, where *PostWhereInput, orders []O
 			conds = append(conds, sub)
 		}
 	}
+	// 一律排除 draft / archived，避免被 story 查詢到
+	conds = append(conds, `"state" NOT IN ('draft','archived')`)
 
 	if len(conds) > 0 {
 		sb.WriteString(" WHERE ")
@@ -733,6 +735,9 @@ func (r *Repo) QueryPostsCount(ctx context.Context, where *PostWhereInput) (int,
 			conds = append(conds, sub)
 		}
 	}
+	// 一律排除 draft / archived，避免被 story 查詢到
+	conds = append(conds, `"state" NOT IN ('draft','archived')`)
+
 	if len(conds) > 0 {
 		sb.WriteString(" WHERE ")
 		sb.WriteString(strings.Join(conds, " AND "))
@@ -1397,6 +1402,16 @@ func (r *Repo) enrichPosts(ctx context.Context, posts []Post) error {
 		return err
 	}
 
+	// 先替 relatedsOne / Two / Three 會用到的單篇 post 補上 heroImage 詳細資料
+	for id, rp := range relatedSinglePosts {
+		if imgID := getMetaInt(rp.Metadata, "heroImageID"); imgID > 0 {
+			if img, ok := imageMap[imgID]; ok {
+				rp.HeroImage = img
+				relatedSinglePosts[id] = rp
+			}
+		}
+	}
+
 	for i := range posts {
 		p := &posts[i]
 		id, _ := strconv.Atoi(p.ID)
@@ -1586,11 +1601,13 @@ func (r *Repo) fetchRelatedPosts(ctx context.Context, postIDs []int) (map[int][]
 		FROM "_Post_relateds" r
 		JOIN "Post" p ON p.id = r."B"
 		WHERE r."A" = ANY($1)
+		  AND p.state NOT IN ('draft','archived')
 		UNION
 		SELECT r."B" as post_id, p.id, p.slug, p.title, p."heroImage"
 		FROM "_Post_relateds" r
 		JOIN "Post" p ON p.id = r."A"
 		WHERE r."B" = ANY($1)
+		  AND p.state NOT IN ('draft','archived')
 	`
 	rows, err := r.db.QueryContext(ctx, query, pqIntArray(postIDs))
 	if err != nil {
@@ -1838,6 +1855,7 @@ func (r *Repo) fetchExternalRelateds(ctx context.Context, externalIDs []int) (ma
 		FROM "_External_relateds" er
 		JOIN "Post" p ON p.id = er."B"
 		WHERE er."A" = ANY($1)
+		  AND p.state NOT IN ('draft','archived')
 	`
 	rows, err := r.db.QueryContext(ctx, query, pqIntArray(externalIDs))
 	if err != nil {
