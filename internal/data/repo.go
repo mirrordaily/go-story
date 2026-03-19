@@ -535,8 +535,8 @@ func (r *Repo) QueryPosts(ctx context.Context, where *PostWhereInput, orders []O
 			conds = append(conds, sub)
 		}
 	}
-	// 一律排除 draft / archived，避免被 story 查詢到
-	conds = append(conds, `"state" NOT IN ('draft','archived')`)
+	// 一律排除 draft / archived / scheduled，避免被 story 查詢到
+	conds = append(conds, `"state" NOT IN ('draft','archived','scheduled')`)
 
 	if len(conds) > 0 {
 		sb.WriteString(" WHERE ")
@@ -735,8 +735,8 @@ func (r *Repo) QueryPostsCount(ctx context.Context, where *PostWhereInput) (int,
 			conds = append(conds, sub)
 		}
 	}
-	// 一律排除 draft / archived，避免被 story 查詢到
-	conds = append(conds, `"state" NOT IN ('draft','archived')`)
+	// 一律排除 draft / archived / scheduled，避免被 story 查詢到
+	conds = append(conds, `"state" NOT IN ('draft','archived','scheduled')`)
 
 	if len(conds) > 0 {
 		sb.WriteString(" WHERE ")
@@ -1601,13 +1601,13 @@ func (r *Repo) fetchRelatedPosts(ctx context.Context, postIDs []int) (map[int][]
 		FROM "_Post_relateds" r
 		JOIN "Post" p ON p.id = r."B"
 		WHERE r."A" = ANY($1)
-		  AND p.state NOT IN ('draft','archived')
+		  AND p.state NOT IN ('draft','archived','scheduled')
 		UNION
 		SELECT r."B" as post_id, p.id, p.slug, p.title, p."heroImage"
 		FROM "_Post_relateds" r
 		JOIN "Post" p ON p.id = r."A"
 		WHERE r."B" = ANY($1)
-		  AND p.state NOT IN ('draft','archived')
+		  AND p.state NOT IN ('draft','archived','scheduled')
 	`
 	rows, err := r.db.QueryContext(ctx, query, pqIntArray(postIDs))
 	if err != nil {
@@ -1855,7 +1855,7 @@ func (r *Repo) fetchExternalRelateds(ctx context.Context, externalIDs []int) (ma
 		FROM "_External_relateds" er
 		JOIN "Post" p ON p.id = er."B"
 		WHERE er."A" = ANY($1)
-		  AND p.state NOT IN ('draft','archived')
+		  AND p.state NOT IN ('draft','archived','scheduled')
 	`
 	rows, err := r.db.QueryContext(ctx, query, pqIntArray(externalIDs))
 	if err != nil {
