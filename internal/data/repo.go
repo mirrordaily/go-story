@@ -1639,7 +1639,8 @@ func (r *Repo) fetchPostsByIDs(ctx context.Context, ids []int) ([]Post, []int, e
 	if len(ids) == 0 {
 		return result, imageIDs, nil
 	}
-	rows, err := r.db.QueryContext(ctx, `SELECT id, slug, title, "heroImage" FROM "Post" WHERE id = ANY($1)`, pqIntArray(ids))
+	// 只抓非 draft / archived / scheduled 的單篇 post，避免 relatedsOne/Two/Three 指到被排除的文章
+	rows, err := r.db.QueryContext(ctx, `SELECT id, slug, title, state, "heroImage" FROM "Post" WHERE id = ANY($1) AND state NOT IN ('draft','archived','scheduled')`, pqIntArray(ids))
 	if err != nil {
 		return result, imageIDs, err
 	}
@@ -1648,7 +1649,7 @@ func (r *Repo) fetchPostsByIDs(ctx context.Context, ids []int) ([]Post, []int, e
 		var p Post
 		var dbID int
 		var hero sql.NullInt64
-		if err := rows.Scan(&dbID, &p.Slug, &p.Title, &hero); err != nil {
+		if err := rows.Scan(&dbID, &p.Slug, &p.Title, &p.State, &hero); err != nil {
 			return result, imageIDs, err
 		}
 		p.ID = strconv.Itoa(dbID)
