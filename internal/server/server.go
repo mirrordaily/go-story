@@ -151,6 +151,7 @@ func runProbeTests(target string) []ProbeResult {
     subtitle
     heroCaption
     publishedDate
+    createdAt
     hiddenAdvertised
     heroImage {
       id
@@ -504,6 +505,7 @@ query GetExternalsByPartnerSlug(
       slug
       title
       publishedDate
+      createdAt
       heroImage {
         id
         imageFile {
@@ -587,6 +589,8 @@ query GetExternalsByPartnerSlug(
       id
       slug
       title
+      publishedDate
+      createdAt
       heroImage {
         id
         imageFile {

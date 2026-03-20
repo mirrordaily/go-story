@@ -536,6 +536,7 @@ func Build(repo *data.Repo) (graphql.Schema, error) {
 				"state":         &graphql.Field{Type: graphql.String},
 				"style":         &graphql.Field{Type: graphql.String},
 				"publishedDate": &graphql.Field{Type: dateTimeScalar},
+				"createdAt":     &graphql.Field{Type: dateTimeScalar},
 				"updatedAt":     &graphql.Field{Type: dateTimeScalar},
 				"isMember":      &graphql.Field{Type: graphql.Boolean},
 				"isAdult":       &graphql.Field{Type: graphql.Boolean},
