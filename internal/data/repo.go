@@ -247,6 +247,10 @@ type PartnerWhereInput struct {
 
 type DateTimeNullableFilter struct {
 	Equals *string                 `mapstructure:"equals"`
+	Lt     *string                 `mapstructure:"lt"`
+	Lte    *string                 `mapstructure:"lte"`
+	Gt     *string                 `mapstructure:"gt"`
+	Gte    *string                 `mapstructure:"gte"`
 	Not    *DateTimeNullableFilter `mapstructure:"not"`
 }
 
@@ -255,6 +259,7 @@ type PostWhereInput struct {
 	Sections   *SectionManyRelationFilter  `mapstructure:"sections"`
 	Categories *CategoryManyRelationFilter `mapstructure:"categories"`
 	State      *StringFilter               `mapstructure:"state"`
+	PublishedDate *DateTimeNullableFilter `mapstructure:"publishedDate"`
 	IsAdult    *BooleanFilter              `mapstructure:"isAdult"`
 	IsMember   *BooleanFilter              `mapstructure:"isMember"`
 }
@@ -535,6 +540,42 @@ func (r *Repo) QueryPosts(ctx context.Context, where *PostWhereInput, orders []O
 			sub += ")"
 			conds = append(conds, sub)
 		}
+		if where.PublishedDate != nil {
+			if where.PublishedDate.Equals != nil {
+				conds = append(conds, fmt.Sprintf(`"publishedDate" = $%d`, argIdx))
+				args = append(args, *where.PublishedDate.Equals)
+				argIdx++
+			}
+			if where.PublishedDate.Lt != nil {
+				conds = append(conds, fmt.Sprintf(`"publishedDate" < $%d`, argIdx))
+				args = append(args, *where.PublishedDate.Lt)
+				argIdx++
+			}
+			if where.PublishedDate.Lte != nil {
+				conds = append(conds, fmt.Sprintf(`"publishedDate" <= $%d`, argIdx))
+				args = append(args, *where.PublishedDate.Lte)
+				argIdx++
+			}
+			if where.PublishedDate.Gt != nil {
+				conds = append(conds, fmt.Sprintf(`"publishedDate" > $%d`, argIdx))
+				args = append(args, *where.PublishedDate.Gt)
+				argIdx++
+			}
+			if where.PublishedDate.Gte != nil {
+				conds = append(conds, fmt.Sprintf(`"publishedDate" >= $%d`, argIdx))
+				args = append(args, *where.PublishedDate.Gte)
+				argIdx++
+			}
+			if where.PublishedDate.Not != nil {
+				if where.PublishedDate.Not.Equals != nil {
+					conds = append(conds, fmt.Sprintf(`"publishedDate" <> $%d`, argIdx))
+					args = append(args, *where.PublishedDate.Not.Equals)
+					argIdx++
+				} else {
+					conds = append(conds, `"publishedDate" IS NOT NULL`)
+				}
+			}
+		}
 	}
 	// 一律排除 draft / archived / scheduled，避免被 story 查詢到
 	conds = append(conds, `"state" NOT IN ('draft','archived','scheduled')`)
@@ -739,6 +780,42 @@ func (r *Repo) QueryPostsCount(ctx context.Context, where *PostWhereInput) (int,
 			// }
 			sub += ")"
 			conds = append(conds, sub)
+		}
+		if where.PublishedDate != nil {
+			if where.PublishedDate.Equals != nil {
+				conds = append(conds, fmt.Sprintf(`"publishedDate" = $%d`, argIdx))
+				args = append(args, *where.PublishedDate.Equals)
+				argIdx++
+			}
+			if where.PublishedDate.Lt != nil {
+				conds = append(conds, fmt.Sprintf(`"publishedDate" < $%d`, argIdx))
+				args = append(args, *where.PublishedDate.Lt)
+				argIdx++
+			}
+			if where.PublishedDate.Lte != nil {
+				conds = append(conds, fmt.Sprintf(`"publishedDate" <= $%d`, argIdx))
+				args = append(args, *where.PublishedDate.Lte)
+				argIdx++
+			}
+			if where.PublishedDate.Gt != nil {
+				conds = append(conds, fmt.Sprintf(`"publishedDate" > $%d`, argIdx))
+				args = append(args, *where.PublishedDate.Gt)
+				argIdx++
+			}
+			if where.PublishedDate.Gte != nil {
+				conds = append(conds, fmt.Sprintf(`"publishedDate" >= $%d`, argIdx))
+				args = append(args, *where.PublishedDate.Gte)
+				argIdx++
+			}
+			if where.PublishedDate.Not != nil {
+				if where.PublishedDate.Not.Equals != nil {
+					conds = append(conds, fmt.Sprintf(`"publishedDate" <> $%d`, argIdx))
+					args = append(args, *where.PublishedDate.Not.Equals)
+					argIdx++
+				} else {
+					conds = append(conds, `"publishedDate" IS NOT NULL`)
+				}
+			}
 		}
 	}
 	// 一律排除 draft / archived / scheduled，避免被 story 查詢到
@@ -1294,6 +1371,8 @@ func buildOrderClause(rule OrderRule) string {
 		return fmt.Sprintf(`"publishedDate" %s`, dir)
 	case "updatedAt":
 		return fmt.Sprintf(`"updatedAt" %s`, dir)
+	case "createdAt":
+		return fmt.Sprintf(`"createdAt" %s`, dir)
 	case "title":
 		return fmt.Sprintf(`"title" %s`, dir)
 	default:
