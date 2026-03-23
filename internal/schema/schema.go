@@ -37,6 +37,10 @@ func Build(repo *data.Repo) (graphql.Schema, error) {
 		Fields: dateTimeNullableFilterFields,
 	})
 	dateTimeNullableFilterFields["equals"] = &graphql.InputObjectFieldConfig{Type: dateTimeScalar}
+	dateTimeNullableFilterFields["lt"] = &graphql.InputObjectFieldConfig{Type: dateTimeScalar}
+	dateTimeNullableFilterFields["lte"] = &graphql.InputObjectFieldConfig{Type: dateTimeScalar}
+	dateTimeNullableFilterFields["gt"] = &graphql.InputObjectFieldConfig{Type: dateTimeScalar}
+	dateTimeNullableFilterFields["gte"] = &graphql.InputObjectFieldConfig{Type: dateTimeScalar}
 	dateTimeNullableFilterFields["not"] = &graphql.InputObjectFieldConfig{Type: dateTimeNullableFilter}
 
 	sectionWhereInputType := graphql.NewInputObject(graphql.InputObjectConfig{
@@ -89,6 +93,7 @@ func Build(repo *data.Repo) (graphql.Schema, error) {
 		"sections":   &graphql.InputObjectFieldConfig{Type: sectionManyRelationFilterType},
 		"categories": &graphql.InputObjectFieldConfig{Type: categoryManyRelationFilterType},
 		"state":      &graphql.InputObjectFieldConfig{Type: stringFilterInput},
+		"publishedDate": &graphql.InputObjectFieldConfig{Type: dateTimeNullableFilter},
 		"isAdult":    &graphql.InputObjectFieldConfig{Type: booleanFilterInput},
 		"isMember":   &graphql.InputObjectFieldConfig{Type: booleanFilterInput},
 	}
@@ -211,6 +216,7 @@ func Build(repo *data.Repo) (graphql.Schema, error) {
 		Fields: graphql.InputObjectConfigFieldMap{
 			"publishedDate": &graphql.InputObjectFieldConfig{Type: orderDirectionEnum},
 			"updatedAt":     &graphql.InputObjectFieldConfig{Type: orderDirectionEnum},
+			"createdAt":     &graphql.InputObjectFieldConfig{Type: orderDirectionEnum},
 			"title":         &graphql.InputObjectFieldConfig{Type: orderDirectionEnum},
 		},
 	})
@@ -536,6 +542,7 @@ func Build(repo *data.Repo) (graphql.Schema, error) {
 				"state":         &graphql.Field{Type: graphql.String},
 				"style":         &graphql.Field{Type: graphql.String},
 				"publishedDate": &graphql.Field{Type: dateTimeScalar},
+				"createdAt":     &graphql.Field{Type: dateTimeScalar},
 				"updatedAt":     &graphql.Field{Type: dateTimeScalar},
 				"isMember":      &graphql.Field{Type: graphql.Boolean},
 				"isAdult":       &graphql.Field{Type: graphql.Boolean},

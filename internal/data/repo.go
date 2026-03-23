@@ -147,6 +147,7 @@ type Post struct {
 	Style                  string         `json:"style"`
 	PublishedDate          string         `json:"publishedDate"`
 	UpdatedAt              string         `json:"updatedAt"`
+	CreatedAt              string         `json:"createdAt"`
 	IsMember               bool           `json:"isMember"`
 	IsAdult                bool           `json:"isAdult"`
 	Sections               []Section      `json:"sections"`
@@ -246,6 +247,10 @@ type PartnerWhereInput struct {
 
 type DateTimeNullableFilter struct {
 	Equals *string                 `mapstructure:"equals"`
+	Lt     *string                 `mapstructure:"lt"`
+	Lte    *string                 `mapstructure:"lte"`
+	Gt     *string                 `mapstructure:"gt"`
+	Gte    *string                 `mapstructure:"gte"`
 	Not    *DateTimeNullableFilter `mapstructure:"not"`
 }
 
@@ -254,6 +259,7 @@ type PostWhereInput struct {
 	Sections   *SectionManyRelationFilter  `mapstructure:"sections"`
 	Categories *CategoryManyRelationFilter `mapstructure:"categories"`
 	State      *StringFilter               `mapstructure:"state"`
+	PublishedDate *DateTimeNullableFilter `mapstructure:"publishedDate"`
 	IsAdult    *BooleanFilter              `mapstructure:"isAdult"`
 	IsMember   *BooleanFilter              `mapstructure:"isMember"`
 }
@@ -463,7 +469,7 @@ func (r *Repo) QueryPosts(ctx context.Context, where *PostWhereInput, orders []O
 	}
 
 	sb := strings.Builder{}
-	sb.WriteString(`SELECT id, slug, title, subtitle, state, style, "isMember", "isAdult", "publishedDate", "updatedAt", COALESCE("heroCaption",'') as heroCaption, COALESCE("extend_byline",'') as extend_byline, "heroImage", "heroVideo", brief, "apiDataBrief", "apiData", content, COALESCE(redirect,'') as redirect, COALESCE(og_title,'') as og_title, COALESCE(og_description,'') as og_description, "hiddenAdvertised", "isAdvertised", "isFeatured", topics, "og_image", "relatedsOne", "relatedsTwo", "relatedsThree" FROM "Post" p`)
+	sb.WriteString(`SELECT id, slug, title, subtitle, state, style, "isMember", "isAdult", "publishedDate", "updatedAt", "createdAt", COALESCE("heroCaption",'') as heroCaption, COALESCE("extend_byline",'') as extend_byline, "heroImage", "heroVideo", brief, "apiDataBrief", "apiData", content, COALESCE(redirect,'') as redirect, COALESCE(og_title,'') as og_title, COALESCE(og_description,'') as og_description, "hiddenAdvertised", "isAdvertised", "isFeatured", topics, "og_image", "relatedsOne", "relatedsTwo", "relatedsThree" FROM "Post" p`)
 
 	conds := []string{}
 	args := []interface{}{}
@@ -534,7 +540,45 @@ func (r *Repo) QueryPosts(ctx context.Context, where *PostWhereInput, orders []O
 			sub += ")"
 			conds = append(conds, sub)
 		}
+		if where.PublishedDate != nil {
+			if where.PublishedDate.Equals != nil {
+				conds = append(conds, fmt.Sprintf(`"publishedDate" = $%d`, argIdx))
+				args = append(args, *where.PublishedDate.Equals)
+				argIdx++
+			}
+			if where.PublishedDate.Lt != nil {
+				conds = append(conds, fmt.Sprintf(`"publishedDate" < $%d`, argIdx))
+				args = append(args, *where.PublishedDate.Lt)
+				argIdx++
+			}
+			if where.PublishedDate.Lte != nil {
+				conds = append(conds, fmt.Sprintf(`"publishedDate" <= $%d`, argIdx))
+				args = append(args, *where.PublishedDate.Lte)
+				argIdx++
+			}
+			if where.PublishedDate.Gt != nil {
+				conds = append(conds, fmt.Sprintf(`"publishedDate" > $%d`, argIdx))
+				args = append(args, *where.PublishedDate.Gt)
+				argIdx++
+			}
+			if where.PublishedDate.Gte != nil {
+				conds = append(conds, fmt.Sprintf(`"publishedDate" >= $%d`, argIdx))
+				args = append(args, *where.PublishedDate.Gte)
+				argIdx++
+			}
+			if where.PublishedDate.Not != nil {
+				if where.PublishedDate.Not.Equals != nil {
+					conds = append(conds, fmt.Sprintf(`"publishedDate" <> $%d`, argIdx))
+					args = append(args, *where.PublishedDate.Not.Equals)
+					argIdx++
+				} else {
+					conds = append(conds, `"publishedDate" IS NOT NULL`)
+				}
+			}
+		}
 	}
+	// 一律排除 draft / archived / scheduled，避免被 story 查詢到
+	conds = append(conds, `"state" NOT IN ('draft','archived','scheduled')`)
 
 	if len(conds) > 0 {
 		sb.WriteString(" WHERE ")
@@ -568,6 +612,7 @@ func (r *Repo) QueryPosts(ctx context.Context, where *PostWhereInput, orders []O
 			dbID            int
 			publishedAt     sql.NullTime
 			updatedAt       sql.NullTime
+			createdAt       sql.NullTime
 			heroImageID     sql.NullInt64
 			heroVideoID     sql.NullInt64
 			ogImageID       sql.NullInt64
@@ -591,6 +636,7 @@ func (r *Repo) QueryPosts(ctx context.Context, where *PostWhereInput, orders []O
 			&p.IsAdult,
 			&publishedAt,
 			&updatedAt,
+			&createdAt,
 			&p.HeroCaption,
 			&p.ExtendByline,
 			&heroImageID,
@@ -619,6 +665,9 @@ func (r *Repo) QueryPosts(ctx context.Context, where *PostWhereInput, orders []O
 		}
 		if updatedAt.Valid {
 			p.UpdatedAt = updatedAt.Time.UTC().Format(timeLayoutMilli)
+		}
+		if createdAt.Valid {
+			p.CreatedAt = createdAt.Time.UTC().Format(timeLayoutMilli)
 		}
 		p.Brief = decodeJSONBytes(briefRaw)
 		p.ApiDataBrief = decodeJSONBytesAny(apiDataBrief)
@@ -732,7 +781,46 @@ func (r *Repo) QueryPostsCount(ctx context.Context, where *PostWhereInput) (int,
 			sub += ")"
 			conds = append(conds, sub)
 		}
+		if where.PublishedDate != nil {
+			if where.PublishedDate.Equals != nil {
+				conds = append(conds, fmt.Sprintf(`"publishedDate" = $%d`, argIdx))
+				args = append(args, *where.PublishedDate.Equals)
+				argIdx++
+			}
+			if where.PublishedDate.Lt != nil {
+				conds = append(conds, fmt.Sprintf(`"publishedDate" < $%d`, argIdx))
+				args = append(args, *where.PublishedDate.Lt)
+				argIdx++
+			}
+			if where.PublishedDate.Lte != nil {
+				conds = append(conds, fmt.Sprintf(`"publishedDate" <= $%d`, argIdx))
+				args = append(args, *where.PublishedDate.Lte)
+				argIdx++
+			}
+			if where.PublishedDate.Gt != nil {
+				conds = append(conds, fmt.Sprintf(`"publishedDate" > $%d`, argIdx))
+				args = append(args, *where.PublishedDate.Gt)
+				argIdx++
+			}
+			if where.PublishedDate.Gte != nil {
+				conds = append(conds, fmt.Sprintf(`"publishedDate" >= $%d`, argIdx))
+				args = append(args, *where.PublishedDate.Gte)
+				argIdx++
+			}
+			if where.PublishedDate.Not != nil {
+				if where.PublishedDate.Not.Equals != nil {
+					conds = append(conds, fmt.Sprintf(`"publishedDate" <> $%d`, argIdx))
+					args = append(args, *where.PublishedDate.Not.Equals)
+					argIdx++
+				} else {
+					conds = append(conds, `"publishedDate" IS NOT NULL`)
+				}
+			}
+		}
 	}
+	// 一律排除 draft / archived / scheduled，避免被 story 查詢到
+	conds = append(conds, `"state" NOT IN ('draft','archived','scheduled')`)
+
 	if len(conds) > 0 {
 		sb.WriteString(" WHERE ")
 		sb.WriteString(strings.Join(conds, " AND "))
@@ -762,7 +850,7 @@ func (r *Repo) QueryPostByUnique(ctx context.Context, where *PostWhereUniqueInpu
 	}
 
 	sb := strings.Builder{}
-	sb.WriteString(`SELECT id, slug, title, subtitle, state, style, "isMember", "isAdult", "publishedDate", "updatedAt", COALESCE("heroCaption",'') as heroCaption, COALESCE("extend_byline",'') as extend_byline, "heroImage", "heroVideo", brief, "apiDataBrief", "apiData", content, COALESCE(redirect,'') as redirect, COALESCE(og_title,'') as og_title, COALESCE(og_description,'') as og_description, "hiddenAdvertised", "isAdvertised", "isFeatured", topics, "og_image", "relatedsOne", "relatedsTwo", "relatedsThree" FROM "Post" p WHERE `)
+	sb.WriteString(`SELECT id, slug, title, subtitle, state, style, "isMember", "isAdult", "publishedDate", "updatedAt", "createdAt", COALESCE("heroCaption",'') as heroCaption, COALESCE("extend_byline",'') as extend_byline, "heroImage", "heroVideo", brief, "apiDataBrief", "apiData", content, COALESCE(redirect,'') as redirect, COALESCE(og_title,'') as og_title, COALESCE(og_description,'') as og_description, "hiddenAdvertised", "isAdvertised", "isFeatured", topics, "og_image", "relatedsOne", "relatedsTwo", "relatedsThree" FROM "Post" p WHERE `)
 	args := []interface{}{}
 	argIdx := 1
 	if where.ID != nil {
@@ -776,13 +864,15 @@ func (r *Repo) QueryPostByUnique(ctx context.Context, where *PostWhereUniqueInpu
 	} else {
 		return nil, nil
 	}
-	sb.WriteString(" LIMIT 1")
+	// 單篇查詢也要排除 draft / archived / scheduled
+	sb.WriteString(" AND p.state NOT IN ('draft','archived','scheduled') LIMIT 1")
 
 	var (
 		p               Post
 		dbID            int
 		publishedAt     sql.NullTime
 		updatedAt       sql.NullTime
+		createdAt       sql.NullTime
 		heroImageID     sql.NullInt64
 		heroVideoID     sql.NullInt64
 		ogImageID       sql.NullInt64
@@ -807,6 +897,7 @@ func (r *Repo) QueryPostByUnique(ctx context.Context, where *PostWhereUniqueInpu
 		&p.IsAdult,
 		&publishedAt,
 		&updatedAt,
+		&createdAt,
 		&p.HeroCaption,
 		&p.ExtendByline,
 		&heroImageID,
@@ -839,6 +930,9 @@ func (r *Repo) QueryPostByUnique(ctx context.Context, where *PostWhereUniqueInpu
 	}
 	if updatedAt.Valid {
 		p.UpdatedAt = updatedAt.Time.UTC().Format(timeLayoutMilli)
+	}
+	if createdAt.Valid {
+		p.CreatedAt = createdAt.Time.UTC().Format(timeLayoutMilli)
 	}
 	p.Brief = decodeJSONBytes(briefRaw)
 	p.ApiDataBrief = decodeJSONBytesAny(apiDataBrief)
@@ -1277,6 +1371,8 @@ func buildOrderClause(rule OrderRule) string {
 		return fmt.Sprintf(`"publishedDate" %s`, dir)
 	case "updatedAt":
 		return fmt.Sprintf(`"updatedAt" %s`, dir)
+	case "createdAt":
+		return fmt.Sprintf(`"createdAt" %s`, dir)
 	case "title":
 		return fmt.Sprintf(`"title" %s`, dir)
 	default:
@@ -1395,6 +1491,16 @@ func (r *Repo) enrichPosts(ctx context.Context, posts []Post) error {
 	imageMap, err := r.fetchImages(ctx, imageIDs)
 	if err != nil {
 		return err
+	}
+
+	// 先替 relatedsOne / Two / Three 會用到的單篇 post 補上 heroImage 詳細資料
+	for id, rp := range relatedSinglePosts {
+		if imgID := getMetaInt(rp.Metadata, "heroImageID"); imgID > 0 {
+			if img, ok := imageMap[imgID]; ok {
+				rp.HeroImage = img
+				relatedSinglePosts[id] = rp
+			}
+		}
 	}
 
 	for i := range posts {
@@ -1582,15 +1688,17 @@ func (r *Repo) fetchRelatedPosts(ctx context.Context, postIDs []int) (map[int][]
 		return result, imageIDs, nil
 	}
 	query := `
-		SELECT r."A" as post_id, p.id, p.slug, p.title, p."heroImage"
+		SELECT r."A" as post_id, p.id, p.slug, p.title, p."publishedDate", p."createdAt", p."heroImage"
 		FROM "_Post_relateds" r
 		JOIN "Post" p ON p.id = r."B"
 		WHERE r."A" = ANY($1)
+		  AND p.state NOT IN ('draft','archived','scheduled')
 		UNION
-		SELECT r."B" as post_id, p.id, p.slug, p.title, p."heroImage"
+		SELECT r."B" as post_id, p.id, p.slug, p.title, p."publishedDate", p."createdAt", p."heroImage"
 		FROM "_Post_relateds" r
 		JOIN "Post" p ON p.id = r."A"
 		WHERE r."B" = ANY($1)
+		  AND p.state NOT IN ('draft','archived','scheduled')
 	`
 	rows, err := r.db.QueryContext(ctx, query, pqIntArray(postIDs))
 	if err != nil {
@@ -1601,11 +1709,19 @@ func (r *Repo) fetchRelatedPosts(ctx context.Context, postIDs []int) (map[int][]
 		var pid int
 		var rp Post
 		var dbID int
+		var publishedAt sql.NullTime
+		var createdAt sql.NullTime
 		var heroID sql.NullInt64
-		if err := rows.Scan(&pid, &dbID, &rp.Slug, &rp.Title, &heroID); err != nil {
+		if err := rows.Scan(&pid, &dbID, &rp.Slug, &rp.Title, &publishedAt, &createdAt, &heroID); err != nil {
 			return result, imageIDs, err
 		}
 		rp.ID = strconv.Itoa(dbID)
+		if publishedAt.Valid {
+			rp.PublishedDate = publishedAt.Time.UTC().Format(timeLayoutMilli)
+		}
+		if createdAt.Valid {
+			rp.CreatedAt = createdAt.Time.UTC().Format(timeLayoutMilli)
+		}
 		if heroID.Valid {
 			imageIDs = append(imageIDs, int(heroID.Int64))
 			rp.Metadata = map[string]any{"heroImageID": int(heroID.Int64)}
@@ -1621,7 +1737,8 @@ func (r *Repo) fetchPostsByIDs(ctx context.Context, ids []int) ([]Post, []int, e
 	if len(ids) == 0 {
 		return result, imageIDs, nil
 	}
-	rows, err := r.db.QueryContext(ctx, `SELECT id, slug, title, "heroImage" FROM "Post" WHERE id = ANY($1)`, pqIntArray(ids))
+	// 只抓非 draft / archived / scheduled 的單篇 post，避免 relatedsOne/Two/Three 指到被排除的文章
+	rows, err := r.db.QueryContext(ctx, `SELECT id, slug, title, state, "publishedDate", "createdAt", "heroImage" FROM "Post" WHERE id = ANY($1) AND state NOT IN ('draft','archived','scheduled')`, pqIntArray(ids))
 	if err != nil {
 		return result, imageIDs, err
 	}
@@ -1629,11 +1746,19 @@ func (r *Repo) fetchPostsByIDs(ctx context.Context, ids []int) ([]Post, []int, e
 	for rows.Next() {
 		var p Post
 		var dbID int
+		var publishedAt sql.NullTime
+		var createdAt sql.NullTime
 		var hero sql.NullInt64
-		if err := rows.Scan(&dbID, &p.Slug, &p.Title, &hero); err != nil {
+		if err := rows.Scan(&dbID, &p.Slug, &p.Title, &p.State, &publishedAt, &createdAt, &hero); err != nil {
 			return result, imageIDs, err
 		}
 		p.ID = strconv.Itoa(dbID)
+		if publishedAt.Valid {
+			p.PublishedDate = publishedAt.Time.UTC().Format(timeLayoutMilli)
+		}
+		if createdAt.Valid {
+			p.CreatedAt = createdAt.Time.UTC().Format(timeLayoutMilli)
+		}
 		if hero.Valid {
 			imageIDs = append(imageIDs, int(hero.Int64))
 			p.Metadata = map[string]any{"heroImageID": int(hero.Int64)}
@@ -1834,10 +1959,11 @@ func (r *Repo) fetchExternalRelateds(ctx context.Context, externalIDs []int) (ma
 		return result, imageIDs, nil
 	}
 	query := `
-		SELECT er."A" as external_id, p.id, p.slug, p.title, p."heroImage"
+		SELECT er."A" as external_id, p.id, p.slug, p.title, p."publishedDate", p."createdAt", p."heroImage"
 		FROM "_External_relateds" er
 		JOIN "Post" p ON p.id = er."B"
 		WHERE er."A" = ANY($1)
+		  AND p.state NOT IN ('draft','archived','scheduled')
 	`
 	rows, err := r.db.QueryContext(ctx, query, pqIntArray(externalIDs))
 	if err != nil {
@@ -1848,11 +1974,19 @@ func (r *Repo) fetchExternalRelateds(ctx context.Context, externalIDs []int) (ma
 		var eid int
 		var rp Post
 		var dbID int
+		var publishedAt sql.NullTime
+		var createdAt sql.NullTime
 		var heroID sql.NullInt64
-		if err := rows.Scan(&eid, &dbID, &rp.Slug, &rp.Title, &heroID); err != nil {
+		if err := rows.Scan(&eid, &dbID, &rp.Slug, &rp.Title, &publishedAt, &createdAt, &heroID); err != nil {
 			return result, imageIDs, err
 		}
 		rp.ID = strconv.Itoa(dbID)
+		if publishedAt.Valid {
+			rp.PublishedDate = publishedAt.Time.UTC().Format(timeLayoutMilli)
+		}
+		if createdAt.Valid {
+			rp.CreatedAt = createdAt.Time.UTC().Format(timeLayoutMilli)
+		}
 		if heroID.Valid {
 			imageIDs = append(imageIDs, int(heroID.Int64))
 			rp.Metadata = map[string]any{"heroImageID": int(heroID.Int64)}
@@ -2480,7 +2614,7 @@ func (r *Repo) fetchTopicPosts(ctx context.Context, topicIDs []int) (map[int][]P
 	}
 	// 根據 schema.prisma，Topic.posts 是透過 Post.topics 欄位關聯（Post.topics 是 Topic 的 foreign key）
 	query := `
-		SELECT p.topics as topic_id, p.id, p.slug, p.title, p."heroImage"
+		SELECT p.topics as topic_id, p.id, p.slug, p.title, p."publishedDate", p."createdAt", p."heroImage"
 		FROM "Post" p
 		WHERE p.topics = ANY($1) AND p.state = 'published'
 		ORDER BY p.topics, p."publishedDate" DESC, p.id DESC
@@ -2492,16 +2626,30 @@ func (r *Repo) fetchTopicPosts(ctx context.Context, topicIDs []int) (map[int][]P
 	defer rows.Close()
 	postIDs := []int{}
 	postMap := map[int]int{} // postID -> topicID
+	publishedAtMap := map[int]string{}
+	createdAtMap := map[int]string{}
+	slugMap := map[int]string{}
+	titleMap := map[int]string{}
 	imageIDs := []int{}
 	for rows.Next() {
 		var topicID, postID int
 		var slug, title string
+		var publishedAt sql.NullTime
+		var createdAt sql.NullTime
 		var heroID sql.NullInt64
-		if err := rows.Scan(&topicID, &postID, &slug, &title, &heroID); err != nil {
+		if err := rows.Scan(&topicID, &postID, &slug, &title, &publishedAt, &createdAt, &heroID); err != nil {
 			return result, err
 		}
 		postIDs = append(postIDs, postID)
 		postMap[postID] = topicID
+		slugMap[postID] = slug
+		titleMap[postID] = title
+		if publishedAt.Valid {
+			publishedAtMap[postID] = publishedAt.Time.UTC().Format(timeLayoutMilli)
+		}
+		if createdAt.Valid {
+			createdAtMap[postID] = createdAt.Time.UTC().Format(timeLayoutMilli)
+		}
 		if heroID.Valid {
 			imageIDs = append(imageIDs, int(heroID.Int64))
 		}
@@ -2511,7 +2659,11 @@ func (r *Repo) fetchTopicPosts(ctx context.Context, topicIDs []int) (map[int][]P
 		// 如果需要完整的 post 資料，可以調用 enrichPosts
 		for _, postID := range postIDs {
 			post := Post{
-				ID: strconv.Itoa(postID),
+				ID:            strconv.Itoa(postID),
+				Slug:          slugMap[postID],
+				Title:         titleMap[postID],
+				PublishedDate: publishedAtMap[postID],
+				CreatedAt:     createdAtMap[postID],
 			}
 			if topicID, ok := postMap[postID]; ok {
 				result[topicID] = append(result[topicID], post)
@@ -2918,7 +3070,7 @@ func (r *Repo) fetchVideoRelatedPosts(ctx context.Context, videoIDs []int) (map[
 	}
 	// 根據 schema.prisma，Video.related_posts 是透過 Post_related_videos 表關聯（Post 是 A，Video 是 B）
 	query := `
-		SELECT prv."B" as video_id, p.id, p.slug, p.title, p."heroImage"
+		SELECT prv."B" as video_id, p.id, p.slug, p.title, p."publishedDate", p."createdAt", p."heroImage"
 		FROM "_Post_related_videos" prv
 		JOIN "Post" p ON p.id = prv."A"
 		WHERE prv."B" = ANY($1) AND p.state = 'published'
@@ -2933,11 +3085,19 @@ func (r *Repo) fetchVideoRelatedPosts(ctx context.Context, videoIDs []int) (map[
 		var videoID int
 		var post Post
 		var dbID int
+		var publishedAt sql.NullTime
+		var createdAt sql.NullTime
 		var heroID sql.NullInt64
-		if err := rows.Scan(&videoID, &dbID, &post.Slug, &post.Title, &heroID); err != nil {
+		if err := rows.Scan(&videoID, &dbID, &post.Slug, &post.Title, &publishedAt, &createdAt, &heroID); err != nil {
 			return result, err
 		}
 		post.ID = strconv.Itoa(dbID)
+		if publishedAt.Valid {
+			post.PublishedDate = publishedAt.Time.UTC().Format(timeLayoutMilli)
+		}
+		if createdAt.Valid {
+			post.CreatedAt = createdAt.Time.UTC().Format(timeLayoutMilli)
+		}
 		if heroID.Valid {
 			post.Metadata = map[string]any{"heroImageID": int(heroID.Int64)}
 		}
