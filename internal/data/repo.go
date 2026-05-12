@@ -1196,7 +1196,7 @@ func (r *Repo) QueryExternalByID(ctx context.Context, id string) (*External, err
 		}
 	}
 
-	query := `SELECT e.id, e.slug, e.title, e.state, e."publishedDate", e."extend_byline", e.thumb, e."thumbCaption", e.brief, e.content, e.partner, e."updatedAt" FROM "External" e WHERE e.id = $1 LIMIT 1`
+	query := `SELECT e.id, e.slug, e.title, e.state, e."publishedDate", e."extend_byline", e.thumb, e."thumbCaption", e.brief, e.content, e.partner, e."updatedAt" FROM "External" e WHERE e.id = $1 AND e.state NOT IN ('draft','archived','scheduled') LIMIT 1`
 
 	var (
 		ext       External
