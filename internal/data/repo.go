@@ -469,7 +469,7 @@ func (r *Repo) QueryPosts(ctx context.Context, where *PostWhereInput, orders []O
 	}
 
 	sb := strings.Builder{}
-	sb.WriteString(`SELECT id, slug, title, subtitle, state, style, "isMember", "isAdult", "publishedDate", "updatedAt", "createdAt", COALESCE("heroCaption",'') as heroCaption, COALESCE("extend_byline",'') as extend_byline, "heroImage", "heroVideo", brief, "apiDataBrief", "apiData", content, COALESCE(redirect,'') as redirect, COALESCE(og_title,'') as og_title, COALESCE(og_description,'') as og_description, "hiddenAdvertised", "isAdvertised", "isFeatured", topics, "og_image", "relatedsOne", "relatedsTwo", "relatedsThree" FROM "Post" p`)
+	sb.WriteString(`SELECT id, slug, title, subtitle, state, style, "isMember", "isAdult", "publishedDate", "updatedAt", "createdAt", COALESCE("heroCaption",'') as heroCaption, COALESCE("extend_byline",'') as extend_byline, "heroImage", "heroVideo", brief, "apiDataBrief", "apiData", content, COALESCE(redirect,'') as redirect, COALESCE(og_title,'') as og_title, COALESCE(og_description,'') as og_description, "hiddenAdvertised", "isAdvertised", "isFeatured", topics, "og_image", "relatedsOne", "relatedsTwo", "relatedsThree", "manualOrderOfWriters" FROM "Post" p`)
 
 	conds := []string{}
 	args := []interface{}{}
@@ -624,6 +624,8 @@ func (r *Repo) QueryPosts(ctx context.Context, where *PostWhereInput, orders []O
 			apiDataBrief    []byte
 			apiData         []byte
 			contentRaw      []byte
+
+			manualOrderOfWritersRaw []byte
 		)
 		if err := rows.Scan(
 			&dbID,
@@ -656,6 +658,7 @@ func (r *Repo) QueryPosts(ctx context.Context, where *PostWhereInput, orders []O
 			&relatedsOneID,
 			&relatedsTwoID,
 			&relatedsThreeID,
+			&manualOrderOfWritersRaw,
 		); err != nil {
 			return nil, err
 		}
@@ -675,13 +678,14 @@ func (r *Repo) QueryPosts(ctx context.Context, where *PostWhereInput, orders []O
 		p.Content = decodeJSONBytes(contentRaw)
 		p.TrimmedContent = p.Content
 		p.Metadata = map[string]any{
-			"heroImageID":     nullableInt(heroImageID),
-			"ogImageID":       nullableInt(ogImageID),
-			"heroVideoID":     nullableInt(heroVideoID),
-			"topicsID":        nullableInt(topicsID),
-			"relatedsOneID":   nullableInt(relatedsOneID),
-			"relatedsTwoID":   nullableInt(relatedsTwoID),
-			"relatedsThreeID": nullableInt(relatedsThreeID),
+			"manualOrderOfWriters": decodeJSONArrayOfMaps(manualOrderOfWritersRaw),
+			"heroImageID":          nullableInt(heroImageID),
+			"ogImageID":            nullableInt(ogImageID),
+			"heroVideoID":          nullableInt(heroVideoID),
+			"topicsID":             nullableInt(topicsID),
+			"relatedsOneID":        nullableInt(relatedsOneID),
+			"relatedsTwoID":        nullableInt(relatedsTwoID),
+			"relatedsThreeID":      nullableInt(relatedsThreeID),
 		}
 		posts = append(posts, p)
 	}
@@ -850,7 +854,7 @@ func (r *Repo) QueryPostByUnique(ctx context.Context, where *PostWhereUniqueInpu
 	}
 
 	sb := strings.Builder{}
-	sb.WriteString(`SELECT id, slug, title, subtitle, state, style, "isMember", "isAdult", "publishedDate", "updatedAt", "createdAt", COALESCE("heroCaption",'') as heroCaption, COALESCE("extend_byline",'') as extend_byline, "heroImage", "heroVideo", brief, "apiDataBrief", "apiData", content, COALESCE(redirect,'') as redirect, COALESCE(og_title,'') as og_title, COALESCE(og_description,'') as og_description, "hiddenAdvertised", "isAdvertised", "isFeatured", topics, "og_image", "relatedsOne", "relatedsTwo", "relatedsThree" FROM "Post" p WHERE `)
+	sb.WriteString(`SELECT id, slug, title, subtitle, state, style, "isMember", "isAdult", "publishedDate", "updatedAt", "createdAt", COALESCE("heroCaption",'') as heroCaption, COALESCE("extend_byline",'') as extend_byline, "heroImage", "heroVideo", brief, "apiDataBrief", "apiData", content, COALESCE(redirect,'') as redirect, COALESCE(og_title,'') as og_title, COALESCE(og_description,'') as og_description, "hiddenAdvertised", "isAdvertised", "isFeatured", topics, "og_image", "relatedsOne", "relatedsTwo", "relatedsThree", "manualOrderOfWriters" FROM "Post" p WHERE `)
 	args := []interface{}{}
 	argIdx := 1
 	if where.ID != nil {
@@ -884,6 +888,8 @@ func (r *Repo) QueryPostByUnique(ctx context.Context, where *PostWhereUniqueInpu
 		apiDataBrief    []byte
 		apiData         []byte
 		contentRaw      []byte
+
+		manualOrderOfWritersRaw []byte
 	)
 
 	err := r.db.QueryRowContext(ctx, sb.String(), args...).Scan(
@@ -917,6 +923,7 @@ func (r *Repo) QueryPostByUnique(ctx context.Context, where *PostWhereUniqueInpu
 		&relatedsOneID,
 		&relatedsTwoID,
 		&relatedsThreeID,
+		&manualOrderOfWritersRaw,
 	)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -940,13 +947,14 @@ func (r *Repo) QueryPostByUnique(ctx context.Context, where *PostWhereUniqueInpu
 	p.Content = decodeJSONBytes(contentRaw)
 	p.TrimmedContent = p.Content
 	p.Metadata = map[string]any{
-		"heroImageID":     nullableInt(heroImageID),
-		"ogImageID":       nullableInt(ogImageID),
-		"heroVideoID":     nullableInt(heroVideoID),
-		"topicsID":        nullableInt(topicsID),
-		"relatedsOneID":   nullableInt(relatedsOneID),
-		"relatedsTwoID":   nullableInt(relatedsTwoID),
-		"relatedsThreeID": nullableInt(relatedsThreeID),
+		"manualOrderOfWriters": decodeJSONArrayOfMaps(manualOrderOfWritersRaw),
+		"heroImageID":          nullableInt(heroImageID),
+		"ogImageID":            nullableInt(ogImageID),
+		"heroVideoID":          nullableInt(heroVideoID),
+		"topicsID":             nullableInt(topicsID),
+		"relatedsOneID":        nullableInt(relatedsOneID),
+		"relatedsTwoID":        nullableInt(relatedsTwoID),
+		"relatedsThreeID":      nullableInt(relatedsThreeID),
 	}
 	posts := []Post{p}
 	if err := r.enrichPosts(ctx, posts); err != nil {
@@ -1511,7 +1519,11 @@ func (r *Repo) enrichPosts(ctx context.Context, posts []Post) error {
 		p.Categories = categoriesMap[id]
 		p.CategoriesInInputOrder = categoriesMap[id]
 		p.Writers = roleMapWriters[id]
-		p.WritersInInputOrder = roleMapWriters[id]
+		if manual, ok := p.Metadata["manualOrderOfWriters"].([]map[string]any); ok && len(manual) > 0 {
+			p.WritersInInputOrder = orderContactsByManual(roleMapWriters[id], manual)
+		} else {
+			p.WritersInInputOrder = roleMapWriters[id]
+		}
 		p.Photographers = roleMapPhotographers[id]
 		p.CameraMan = roleMapCamera[id]
 		p.Designers = roleMapDesigners[id]
@@ -1602,6 +1614,64 @@ func (r *Repo) fetchCategories(ctx context.Context, postIDs []int) (map[int][]Ca
 		result[pid] = append(result[pid], c)
 	}
 	return result, rows.Err()
+}
+
+// decodeJSONArrayOfMaps 解析 JSON array（例如 manualOrderOfWriters），失敗或空值回傳 nil
+func decodeJSONArrayOfMaps(raw []byte) []map[string]any {
+	if len(raw) == 0 {
+		return nil
+	}
+	var arr []map[string]any
+	if err := json.Unmarshal(raw, &arr); err != nil {
+		return nil
+	}
+	return arr
+}
+
+// orderContactsByManual 依 manual（每筆含 id）的順序重排 contacts；
+// 只保留在 contacts 中實際存在的作者，manual 為空時回傳原序。
+func orderContactsByManual(contacts []Contact, manual []map[string]any) []Contact {
+	if len(manual) == 0 {
+		return contacts
+	}
+	byID := make(map[string]Contact, len(contacts))
+	for _, c := range contacts {
+		byID[c.ID] = c
+	}
+	out := make([]Contact, 0, len(contacts))
+	seen := make(map[string]bool, len(contacts))
+	for _, item := range manual {
+		idStr, ok := toIDString(item["id"])
+		if !ok {
+			continue
+		}
+		if c, ok := byID[idStr]; ok && !seen[idStr] {
+			out = append(out, c)
+			seen[idStr] = true
+		}
+	}
+	// 補上 manual 沒涵蓋到、但實際存在的作者，避免遺漏
+	for _, c := range contacts {
+		if !seen[c.ID] {
+			out = append(out, c)
+			seen[c.ID] = true
+		}
+	}
+	return out
+}
+
+// toIDString 把 manualOrderOfWriters 內的 id（可能是 string 或 json number）統一成 string
+func toIDString(v any) (string, bool) {
+	switch id := v.(type) {
+	case string:
+		return id, id != ""
+	case float64:
+		return strconv.FormatInt(int64(id), 10), true
+	case json.Number:
+		return id.String(), true
+	default:
+		return "", false
+	}
 }
 
 func (r *Repo) fetchContacts(ctx context.Context, table string, postIDs []int) (map[int][]Contact, error) {
