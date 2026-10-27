@@ -1098,7 +1098,7 @@ func (r *Repo) QueryExternals(ctx context.Context, where *ExternalWhereInput, or
 		// 查詢失敗時記錄錯誤，但繼續處理
 		_ = err
 	}
-	relatedsMap, _, _ := r.fetchExternalRelateds(ctx, externalIDs)
+	relatedsMap, _ := r.fetchExternalRelateds(ctx, externalIDs)
 	for i := range result {
 		if pid := getMetaInt(result[i].Metadata, "partnerID"); pid > 0 {
 			result[i].Partner = partners[pid]
@@ -1274,7 +1274,7 @@ func (r *Repo) QueryExternalByID(ctx context.Context, id string) (*External, err
 	} else {
 		ext.Categories = []Category{}
 	}
-	relatedsMap, _, _ := r.fetchExternalRelateds(ctx, []int{dbID})
+	relatedsMap, _ := r.fetchExternalRelateds(ctx, []int{dbID})
 	if relateds, ok := relatedsMap[dbID]; ok {
 		ext.Relateds = relateds
 	} else {
@@ -1442,11 +1442,11 @@ func (r *Repo) enrichPosts(ctx context.Context, posts []Post) error {
 		_ = err
 	}
 
-	relatedsMap, relatedImageIDs, err := r.fetchRelatedPosts(ctx, postIDs)
+	relatedsMap, err := r.fetchRelatedPosts(ctx, postIDs)
 	if err != nil {
 		return err
 	}
-	imageIDs := append([]int{}, relatedImageIDs...)
+	imageIDs := []int{}
 
 	relatedOneIDs := []int{}
 	relatedTwoIDs := []int{}
@@ -1463,17 +1463,24 @@ func (r *Repo) enrichPosts(ctx context.Context, posts []Post) error {
 		}
 	}
 	relatedSinglesIDs := append(append(relatedOneIDs, relatedTwoIDs...), relatedThreeIDs...)
-	relatedSinglePosts := map[int]Post{}
+	var singlePosts []Post
 	if len(relatedSinglesIDs) > 0 {
-		sps, imgIDs, err := r.fetchPostsByIDs(ctx, relatedSinglesIDs)
+		singlePosts, err = r.fetchPostsByIDs(ctx, relatedSinglesIDs)
 		if err != nil {
 			return err
 		}
-		for _, sp := range sps {
-			id, _ := strconv.Atoi(sp.ID)
-			relatedSinglePosts[id] = sp
-		}
-		imageIDs = append(imageIDs, imgIDs...)
+	}
+	relatedGroups := [][]Post{singlePosts}
+	for _, rps := range relatedsMap {
+		relatedGroups = append(relatedGroups, rps)
+	}
+	if err := r.hydrateRelatedPosts(ctx, relatedGroups...); err != nil {
+		return err
+	}
+	relatedSinglePosts := make(map[int]Post, len(singlePosts))
+	for _, sp := range singlePosts {
+		id, _ := strconv.Atoi(sp.ID)
+		relatedSinglePosts[id] = sp
 	}
 
 	videoIDs := []int{}
@@ -1499,16 +1506,6 @@ func (r *Repo) enrichPosts(ctx context.Context, posts []Post) error {
 	imageMap, err := r.fetchImages(ctx, imageIDs)
 	if err != nil {
 		return err
-	}
-
-	// 先替 relatedsOne / Two / Three 會用到的單篇 post 補上 heroImage 詳細資料
-	for id, rp := range relatedSinglePosts {
-		if imgID := getMetaInt(rp.Metadata, "heroImageID"); imgID > 0 {
-			if img, ok := imageMap[imgID]; ok {
-				rp.HeroImage = img
-				relatedSinglePosts[id] = rp
-			}
-		}
 	}
 
 	for i := range posts {
@@ -1751,20 +1748,17 @@ func (r *Repo) fetchPostWarnings(ctx context.Context, postIDs []int) (map[int][]
 	return result, rows.Err()
 }
 
-func (r *Repo) fetchRelatedPosts(ctx context.Context, postIDs []int) (map[int][]Post, []int, error) {
+// fetchRelatedPosts returns the posts listed in each post's "relateds" field.
+// Keystone stores the field in "_Post_relateds" with the owning post in "B"
+// and the related post in "A"; rows pointing the other way belong to other
+// posts' lists.
+func (r *Repo) fetchRelatedPosts(ctx context.Context, postIDs []int) (map[int][]Post, error) {
 	result := map[int][]Post{}
-	imageIDs := []int{}
 	if len(postIDs) == 0 {
-		return result, imageIDs, nil
+		return result, nil
 	}
 	query := `
-		SELECT r."A" as post_id, p.id, p.slug, p.title, p."publishedDate", p."createdAt", p."heroImage"
-		FROM "_Post_relateds" r
-		JOIN "Post" p ON p.id = r."B"
-		WHERE r."A" = ANY($1)
-		  AND p.state NOT IN ('draft','archived','scheduled')
-		UNION
-		SELECT r."B" as post_id, p.id, p.slug, p.title, p."publishedDate", p."createdAt", p."heroImage"
+		SELECT r."B" as post_id, p.id, p.slug, p.title, p."publishedDate", p."createdAt", p."heroImage", p."og_image"
 		FROM "_Post_relateds" r
 		JOIN "Post" p ON p.id = r."A"
 		WHERE r."B" = ANY($1)
@@ -1772,7 +1766,7 @@ func (r *Repo) fetchRelatedPosts(ctx context.Context, postIDs []int) (map[int][]
 	`
 	rows, err := r.db.QueryContext(ctx, query, pqIntArray(postIDs))
 	if err != nil {
-		return result, imageIDs, err
+		return result, err
 	}
 	defer rows.Close()
 	for rows.Next() {
@@ -1782,8 +1776,9 @@ func (r *Repo) fetchRelatedPosts(ctx context.Context, postIDs []int) (map[int][]
 		var publishedAt sql.NullTime
 		var createdAt sql.NullTime
 		var heroID sql.NullInt64
-		if err := rows.Scan(&pid, &dbID, &rp.Slug, &rp.Title, &publishedAt, &createdAt, &heroID); err != nil {
-			return result, imageIDs, err
+		var ogImageID sql.NullInt64
+		if err := rows.Scan(&pid, &dbID, &rp.Slug, &rp.Title, &publishedAt, &createdAt, &heroID, &ogImageID); err != nil {
+			return result, err
 		}
 		rp.ID = strconv.Itoa(dbID)
 		if publishedAt.Valid {
@@ -1792,25 +1787,21 @@ func (r *Repo) fetchRelatedPosts(ctx context.Context, postIDs []int) (map[int][]
 		if createdAt.Valid {
 			rp.CreatedAt = createdAt.Time.UTC().Format(timeLayoutMilli)
 		}
-		if heroID.Valid {
-			imageIDs = append(imageIDs, int(heroID.Int64))
-			rp.Metadata = map[string]any{"heroImageID": int(heroID.Int64)}
-		}
+		rp.Metadata = relatedImageMeta(heroID, ogImageID)
 		result[pid] = append(result[pid], rp)
 	}
-	return result, imageIDs, rows.Err()
+	return result, rows.Err()
 }
 
-func (r *Repo) fetchPostsByIDs(ctx context.Context, ids []int) ([]Post, []int, error) {
+func (r *Repo) fetchPostsByIDs(ctx context.Context, ids []int) ([]Post, error) {
 	result := []Post{}
-	imageIDs := []int{}
 	if len(ids) == 0 {
-		return result, imageIDs, nil
+		return result, nil
 	}
 	// 只抓非 draft / archived / scheduled 的單篇 post，避免 relatedsOne/Two/Three 指到被排除的文章
-	rows, err := r.db.QueryContext(ctx, `SELECT id, slug, title, state, "publishedDate", "createdAt", "heroImage" FROM "Post" WHERE id = ANY($1) AND state NOT IN ('draft','archived','scheduled')`, pqIntArray(ids))
+	rows, err := r.db.QueryContext(ctx, `SELECT id, slug, title, state, "publishedDate", "createdAt", "heroImage", "og_image" FROM "Post" WHERE id = ANY($1) AND state NOT IN ('draft','archived','scheduled')`, pqIntArray(ids))
 	if err != nil {
-		return result, imageIDs, err
+		return result, err
 	}
 	defer rows.Close()
 	for rows.Next() {
@@ -1819,8 +1810,9 @@ func (r *Repo) fetchPostsByIDs(ctx context.Context, ids []int) ([]Post, []int, e
 		var publishedAt sql.NullTime
 		var createdAt sql.NullTime
 		var hero sql.NullInt64
-		if err := rows.Scan(&dbID, &p.Slug, &p.Title, &p.State, &publishedAt, &createdAt, &hero); err != nil {
-			return result, imageIDs, err
+		var ogImageID sql.NullInt64
+		if err := rows.Scan(&dbID, &p.Slug, &p.Title, &p.State, &publishedAt, &createdAt, &hero, &ogImageID); err != nil {
+			return result, err
 		}
 		p.ID = strconv.Itoa(dbID)
 		if publishedAt.Valid {
@@ -1829,13 +1821,71 @@ func (r *Repo) fetchPostsByIDs(ctx context.Context, ids []int) ([]Post, []int, e
 		if createdAt.Valid {
 			p.CreatedAt = createdAt.Time.UTC().Format(timeLayoutMilli)
 		}
-		if hero.Valid {
-			imageIDs = append(imageIDs, int(hero.Int64))
-			p.Metadata = map[string]any{"heroImageID": int(hero.Int64)}
-		}
+		p.Metadata = relatedImageMeta(hero, ogImageID)
 		result = append(result, p)
 	}
-	return result, imageIDs, rows.Err()
+	return result, rows.Err()
+}
+
+func relatedImageMeta(heroID, ogImageID sql.NullInt64) map[string]any {
+	meta := map[string]any{}
+	if heroID.Valid {
+		meta["heroImageID"] = int(heroID.Int64)
+	}
+	if ogImageID.Valid {
+		meta["ogImageID"] = int(ogImageID.Int64)
+	}
+	return meta
+}
+
+// hydrateRelatedPosts loads heroImage, og_image and sections for related posts,
+// which the relation queries return as bare rows. Each group is updated in place.
+func (r *Repo) hydrateRelatedPosts(ctx context.Context, groups ...[]Post) error {
+	postIDs := []int{}
+	imageIDs := []int{}
+	for _, posts := range groups {
+		for _, p := range posts {
+			if id, _ := strconv.Atoi(p.ID); id > 0 {
+				postIDs = append(postIDs, id)
+			}
+			if id := getMetaInt(p.Metadata, "heroImageID"); id > 0 {
+				imageIDs = append(imageIDs, id)
+			}
+			if id := getMetaInt(p.Metadata, "ogImageID"); id > 0 {
+				imageIDs = append(imageIDs, id)
+			}
+		}
+	}
+	if len(postIDs) == 0 {
+		return nil
+	}
+	sectionsMap, err := r.fetchSections(ctx, postIDs)
+	if err != nil {
+		return err
+	}
+	imageMap, err := r.fetchImages(ctx, imageIDs)
+	if err != nil {
+		return err
+	}
+	for _, posts := range groups {
+		applyRelatedDetails(posts, imageMap, sectionsMap)
+	}
+	return nil
+}
+
+func applyRelatedDetails(posts []Post, imageMap map[int]*Photo, sectionsMap map[int][]Section) {
+	for i := range posts {
+		p := &posts[i]
+		id, _ := strconv.Atoi(p.ID)
+		p.Sections = sectionsMap[id]
+		p.SectionsInInputOrder = sectionsMap[id]
+		if imgID := getMetaInt(p.Metadata, "heroImageID"); imgID > 0 {
+			p.HeroImage = imageMap[imgID]
+		}
+		if imgID := getMetaInt(p.Metadata, "ogImageID"); imgID > 0 {
+			p.OgImage = imageMap[imgID]
+		}
+	}
 }
 
 func (r *Repo) fetchVideos(ctx context.Context, videoIDs []int) (map[int]*Video, []int, error) {
@@ -2022,14 +2072,13 @@ func (r *Repo) fetchExternalCategories(ctx context.Context, externalIDs []int) (
 	return result, rows.Err()
 }
 
-func (r *Repo) fetchExternalRelateds(ctx context.Context, externalIDs []int) (map[int][]Post, []int, error) {
+func (r *Repo) fetchExternalRelateds(ctx context.Context, externalIDs []int) (map[int][]Post, error) {
 	result := map[int][]Post{}
-	imageIDs := []int{}
 	if len(externalIDs) == 0 {
-		return result, imageIDs, nil
+		return result, nil
 	}
 	query := `
-		SELECT er."A" as external_id, p.id, p.slug, p.title, p."publishedDate", p."createdAt", p."heroImage"
+		SELECT er."A" as external_id, p.id, p.slug, p.title, p."publishedDate", p."createdAt", p."heroImage", p."og_image"
 		FROM "_External_relateds" er
 		JOIN "Post" p ON p.id = er."B"
 		WHERE er."A" = ANY($1)
@@ -2037,7 +2086,7 @@ func (r *Repo) fetchExternalRelateds(ctx context.Context, externalIDs []int) (ma
 	`
 	rows, err := r.db.QueryContext(ctx, query, pqIntArray(externalIDs))
 	if err != nil {
-		return result, imageIDs, err
+		return result, err
 	}
 	defer rows.Close()
 	for rows.Next() {
@@ -2047,8 +2096,9 @@ func (r *Repo) fetchExternalRelateds(ctx context.Context, externalIDs []int) (ma
 		var publishedAt sql.NullTime
 		var createdAt sql.NullTime
 		var heroID sql.NullInt64
-		if err := rows.Scan(&eid, &dbID, &rp.Slug, &rp.Title, &publishedAt, &createdAt, &heroID); err != nil {
-			return result, imageIDs, err
+		var ogImageID sql.NullInt64
+		if err := rows.Scan(&eid, &dbID, &rp.Slug, &rp.Title, &publishedAt, &createdAt, &heroID, &ogImageID); err != nil {
+			return result, err
 		}
 		rp.ID = strconv.Itoa(dbID)
 		if publishedAt.Valid {
@@ -2057,13 +2107,17 @@ func (r *Repo) fetchExternalRelateds(ctx context.Context, externalIDs []int) (ma
 		if createdAt.Valid {
 			rp.CreatedAt = createdAt.Time.UTC().Format(timeLayoutMilli)
 		}
-		if heroID.Valid {
-			imageIDs = append(imageIDs, int(heroID.Int64))
-			rp.Metadata = map[string]any{"heroImageID": int(heroID.Int64)}
-		}
+		rp.Metadata = relatedImageMeta(heroID, ogImageID)
 		result[eid] = append(result[eid], rp)
 	}
-	return result, imageIDs, rows.Err()
+	if err := rows.Err(); err != nil {
+		return result, err
+	}
+	groups := make([][]Post, 0, len(result))
+	for _, rps := range result {
+		groups = append(groups, rps)
+	}
+	return result, r.hydrateRelatedPosts(ctx, groups...)
 }
 
 func (r *Repo) fetchExternalTags(ctx context.Context, table string, externalIDs []int) (map[int][]Tag, error) {

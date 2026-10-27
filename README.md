@@ -70,5 +70,6 @@ docker run --rm -p 8080:8080 \
 - `/api/graphql` 路徑與 KeystoneJS 對齊。
 - 預設會將 posts / externals 的 `state` 套用 `published` 過濾。
 - externals 預設排序過濾掉 `publishedDate` 為 null。
-- relateds/relatedsOne/relatedsTwo 會依 `_Post_relateds` 雙向關聯填入。
+- relateds 與 Keystone 相同，只讀 `_Post_relateds` 中 `B` 為本文、`A` 為相關文章的方向；relatedsOne/Two/Three 讀 Post 本身的欄位。
+- 相關文章（Post 的 relateds、relatedsOne/Two/Three 與 External 的 relateds）會帶 heroImage、og_image 與 sections；relateds 的排序未指定。
 
