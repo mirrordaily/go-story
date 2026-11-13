@@ -319,6 +319,7 @@ type OrderRule struct {
 type Repo struct {
 	db          *sql.DB
 	staticsHost string
+	videoBase   string
 	cache       *Cache
 }
 
@@ -342,7 +343,15 @@ func NewDB(dsn string) (*sql.DB, error) {
 }
 
 func NewRepo(db *sql.DB, staticsHost string, cache *Cache) *Repo {
-	return &Repo{db: db, staticsHost: staticsHost, cache: cache}
+	return &Repo{db: db, staticsHost: staticsHost, videoBase: videoFilesBase(staticsHost), cache: cache}
+}
+
+// videoFilesBase derives the video-files URL base from STATICS_HOST,
+// e.g. https://statics-prod.mirrordaily.news/images/ -> https://statics-prod.mirrordaily.news/video-files
+func videoFilesBase(staticsHost string) string {
+	h := strings.TrimSuffix(staticsHost, "/")
+	h = strings.TrimSuffix(h, "/images")
+	return h + "/video-files"
 }
 
 // Decode helpers
@@ -2949,9 +2958,9 @@ func (r *Repo) QueryVideos(ctx context.Context, where *VideoWhereInput, orders [
 			v.YoutubeDuration = "PT0S"
 		}
 		// 根據 schema.prisma，Video.videoSrc 是 virtual field，需要從 file_filename 生成
-		// 格式：https://statics-dev.mirrordaily.news/video-files/{filename}
+		// Format: {STATICS_HOST without /images}/video-files/{filename}
 		if fileFilename.Valid && fileFilename.String != "" {
-			v.VideoSrc = fmt.Sprintf("https://statics-dev.mirrordaily.news/video-files/%s", fileFilename.String)
+			v.VideoSrc = fmt.Sprintf("%s/%s", r.videoBase, fileFilename.String)
 		} else {
 			v.VideoSrc = ""
 		}
@@ -3086,9 +3095,9 @@ func (r *Repo) QueryVideoByID(ctx context.Context, id string) (*Video, error) {
 		v.YoutubeDuration = "PT0S"
 	}
 	// 根據 schema.prisma，Video.videoSrc 是 virtual field，需要從 file_filename 生成
-	// 格式：https://statics-dev.mirrordaily.news/video-files/{filename}
+	// Format: {STATICS_HOST without /images}/video-files/{filename}
 	if fileFilename.Valid && fileFilename.String != "" {
-		v.VideoSrc = fmt.Sprintf("https://statics-dev.mirrordaily.news/video-files/%s", fileFilename.String)
+		v.VideoSrc = fmt.Sprintf("%s/%s", r.videoBase, fileFilename.String)
 	} else {
 		v.VideoSrc = ""
 	}
